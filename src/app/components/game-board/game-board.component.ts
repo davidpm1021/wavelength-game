@@ -102,6 +102,60 @@ import { GaugeComponent } from '../gauge/gauge.component';
       padding-top: 1rem;
       border-top: 1px solid #e5e7eb;
     }
+    .submit-container {
+      position: relative;
+      z-index: 1000;
+      pointer-events: all;
+      margin-top: 2rem;
+      padding: 1rem;
+      background-color: rgba(255, 255, 255, 0.8);
+      border-radius: 0.5rem;
+    }
+    .button {
+      position: relative;
+      z-index: 1000;
+      pointer-events: all;
+      padding: 0.75rem 2rem;
+      font-size: 1.1rem;
+      border-radius: 0.5rem;
+      background-color: #3b82f6;
+      color: white;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      min-width: 200px;
+    }
+    .button:not(.disabled):hover {
+      background-color: #2563eb;
+      transform: translateY(-1px);
+    }
+    .button.disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+      background-color: #94a3b8;
+    }
+    .submission-status {
+      margin-top: 1rem;
+      padding: 1rem;
+      background-color: #f8fafc;
+      border-radius: 0.5rem;
+    }
+    .player-status {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .player-status:last-child {
+      border-bottom: none;
+    }
+    .status-indicator {
+      font-weight: 500;
+    }
+    .status-indicator.submitted {
+      color: #22c55e;
+    }
   `],
   template: `
     <div class="container">
@@ -111,12 +165,6 @@ import { GaugeComponent } from '../gauge/gauge.component';
         </div>
         
         <ng-container *ngIf="gameState">
-          <!-- Debug info -->
-          <div class="card" style="margin-bottom: 1rem;">
-            <pre>Game Phase: {{gameState.gamePhase}}</pre>
-            <pre>Players: {{gameState.players | json}}</pre>
-          </div>
-
           <!-- Waiting Room -->
           <div *ngIf="gameState.gamePhase === GamePhase.WAITING_FOR_PLAYERS" class="card waiting-room">
             <h2 class="title">Waiting for Players</h2>
@@ -147,21 +195,50 @@ import { GaugeComponent } from '../gauge/gauge.component';
                 {{gameState.roundTimeRemaining}}s
               </div>
 
+              <div class="question-text">
+                {{getCurrentQuestionText()}}
+              </div>
+
+              <div class="concepts">
+                <div class="concept left">
+                  {{getCurrentLeftConcept()}}
+                </div>
+                <div class="concept right">
+                  {{getCurrentRightConcept()}}
+                </div>
+              </div>
+
               <app-gauge
                 [(value)]="sliderPosition"
                 [disabled]="hasSubmittedGuess"
-                [leftLabel]="gameState.currentQuestion.leftConcept"
-                [rightLabel]="gameState.currentQuestion.rightConcept"
+                [leftLabel]="getCurrentLeftConcept()"
+                [rightLabel]="getCurrentRightConcept()"
               ></app-gauge>
 
-              <div style="text-align: center;">
+              <div class="submit-container debug-container" 
+                style="text-align: center;"
+                (mousedown)="onContainerMouseDown()"
+                (click)="onContainerClick($event)">
                 <button 
-                  class="button" 
-                  (click)="submitGuess()"
+                  #submitButton
+                  class="button debug-button"
+                  [class.disabled]="hasSubmittedGuess"
                   [disabled]="hasSubmittedGuess"
-                  [class.disabled]="hasSubmittedGuess">
-                  {{hasSubmittedGuess ? 'Waiting for others...' : 'Submit Guess'}}
+                  (mousedown)="onButtonMouseDown($event)"
+                  (mouseenter)="onButtonMouseEnter()"
+                  (click)="onSubmitClick($event)">
+                  {{getSubmitButtonText()}}
                 </button>
+              </div>
+
+              <!-- Add submission status -->
+              <div class="submission-status" *ngIf="hasSubmittedGuess">
+                <div *ngFor="let player of gameState.players" class="player-status">
+                  <span>{{player.name}}</span>
+                  <span class="status-indicator" [class.submitted]="player.hasSubmitted">
+                    {{player.hasSubmitted ? '✓' : 'Waiting...'}}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -228,29 +305,70 @@ export class GameBoardComponent implements OnInit, OnDestroy {
   GamePhase = GamePhase;
   hasSubmittedGuess = false;
   private gameStateSubscription?: Subscription;
+  private lastSubmittedRound: number = -1;  // Add this to track submissions per round
 
   constructor(private webSocketService: WebSocketService) {
-    console.log('GameBoardComponent constructed');
+    console.log('GameBoard: Constructor - Initial state:', {
+      hasSubmittedGuess: this.hasSubmittedGuess,
+      lastSubmittedRound: this.lastSubmittedRound
+    });
   }
 
   ngOnInit(): void {
-    console.log('GameBoardComponent initializing');
+    console.log('GameBoard: Initializing component');
     this.gameStateSubscription = this.webSocketService.getGameState().subscribe({
       next: (state) => {
-        console.log('Received game state:', state);
+        console.log('GameBoard: Received new game state:', {
+          phase: state?.gamePhase,
+          round: state?.currentRound,
+          players: state?.players?.map(p => ({
+            name: p.name,
+            hasSubmitted: p.hasSubmitted,
+            id: p.id
+          }))
+        });
+
+        const previousState = this.gameState;
         this.gameState = state;
+
         if (state?.gamePhase === GamePhase.ROUND_IN_PROGRESS) {
+          const currentPlayer = state.players.find(
+            p => p.id === this.webSocketService.playerId
+          );
+          
+          console.log('GameBoard: Current player state:', {
+            playerId: this.webSocketService.playerId,
+            currentRound: state.currentRound,
+            hasSubmitted: currentPlayer?.hasSubmitted,
+            localHasSubmitted: this.hasSubmittedGuess
+          });
+
+          // Update local submission state based on server state
+          this.hasSubmittedGuess = currentPlayer?.hasSubmitted ?? false;
+
+          // Log submission status for all players
+          console.log('GameBoard: All players submission status:', 
+            state.players.map(p => ({
+              name: p.name,
+              hasSubmitted: p.hasSubmitted,
+              isCurrentPlayer: p.id === this.webSocketService.playerId
+            }))
+          );
+        } else if (state?.gamePhase !== previousState?.gamePhase) {
+          // Reset submission state when game phase changes
+          console.log('GameBoard: Game phase changed, resetting submission state');
           this.hasSubmittedGuess = false;
+          this.lastSubmittedRound = -1;
         }
       },
       error: (error) => {
-        console.error('Error receiving game state:', error);
+        console.error('GameBoard: Error receiving game state:', error);
       }
     });
   }
 
   ngOnDestroy(): void {
-    console.log('GameBoardComponent destroying');
+    console.log('GameBoard: Component destroying, cleaning up subscription');
     this.gameStateSubscription?.unsubscribe();
   }
 
@@ -258,12 +376,69 @@ export class GameBoardComponent implements OnInit, OnDestroy {
     this.sliderPosition = value;
   }
 
-  submitGuess(): void {
-    if (!this.hasSubmittedGuess) {
-      console.log('Submitting guess:', this.sliderPosition);
-      this.webSocketService.submitGuess(this.sliderPosition);
-      this.hasSubmittedGuess = true;
+  onSubmitClick(event: MouseEvent): void {
+    console.log('GameBoard: Submit button clicked - START', {
+      event: {
+        type: event.type,
+        target: event.target instanceof HTMLButtonElement ? {
+          disabled: event.target.disabled,
+          classList: Array.from(event.target.classList)
+        } : 'not a button',
+        timestamp: new Date().toISOString()
+      },
+      component: {
+        hasSubmittedGuess: this.hasSubmittedGuess,
+        sliderPosition: this.sliderPosition,
+        gamePhase: this.gameState?.gamePhase,
+        playerId: this.webSocketService.playerId
+      }
+    });
+
+    // Check if we can submit
+    if (this.hasSubmittedGuess) {
+      console.log('GameBoard: Cannot submit - already submitted for this round');
+      return;
     }
+
+    if (!this.gameState || this.gameState.gamePhase !== GamePhase.ROUND_IN_PROGRESS) {
+      console.log('GameBoard: Cannot submit - game not in progress', {
+        gameState: this.gameState?.gamePhase
+      });
+      return;
+    }
+
+    // Set hasSubmittedGuess before making the call to prevent double submissions
+    this.hasSubmittedGuess = true;
+    console.log('GameBoard: Setting hasSubmittedGuess to true');
+    
+    console.log('GameBoard: Submitting guess via WebSocket service');
+    this.webSocketService.submitGuess(this.sliderPosition);
+    console.log('GameBoard: Submit guess call completed');
+  }
+
+  onContainerClick(event: MouseEvent): void {
+    console.log('GameBoard: Container clicked', {
+      target: event.target,
+      currentTarget: event.currentTarget,
+      eventPhase: event.eventPhase,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  onButtonMouseDown(event: MouseEvent): void {
+    console.log('GameBoard: Button mousedown', {
+      target: event.target,
+      currentTarget: event.currentTarget,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  onButtonMouseEnter(): void {
+    console.log('GameBoard: Button mouseenter');
+  }
+
+  onContainerMouseDown(): void {
+    console.log('GameBoard: Container mousedown');
   }
 
   startGame(): void {
@@ -282,10 +457,56 @@ export class GameBoardComponent implements OnInit, OnDestroy {
   }
 
   get isHost(): boolean {
-    return this.gameState?.players.some(p => p.id === this.webSocketService.playerId && p.isHost) ?? false;
+    const isHost = this.gameState?.players.some(
+      p => p.id === this.webSocketService.playerId && p.isHost
+    ) ?? false;
+    console.log('GameBoard: Host check:', {
+      playerId: this.webSocketService.playerId,
+      isHost
+    });
+    return isHost;
   }
 
   get sortedPlayers(): Player[] {
     return [...(this.gameState?.players || [])].sort((a, b) => b.score - a.score);
+  }
+
+  getCurrentQuestionText(): string {
+    if (!this.gameState?.currentQuestion) {
+      console.log('No current question available');
+      return 'Loading question...';
+    }
+    console.log('Current question:', this.gameState.currentQuestion);
+    return this.gameState.currentQuestion.text || 'Where does this concept fall on the spectrum?';
+  }
+
+  getCurrentLeftConcept(): string {
+    return this.gameState?.currentQuestion?.leftConcept || 'Left';
+  }
+
+  getCurrentRightConcept(): string {
+    return this.gameState?.currentQuestion?.rightConcept || 'Right';
+  }
+
+  getSubmitButtonText(): string {
+    if (!this.gameState) return 'Submit Guess';
+    
+    const totalPlayers = this.gameState.players.length;
+    const submittedPlayers = this.gameState.players.filter(p => p.hasSubmitted).length;
+    
+    console.log('GameBoard: Button text calculation:', {
+      hasSubmittedGuess: this.hasSubmittedGuess,
+      totalPlayers,
+      submittedPlayers,
+      players: this.gameState.players.map(p => ({
+        name: p.name,
+        hasSubmitted: p.hasSubmitted
+      }))
+    });
+
+    if (!this.hasSubmittedGuess) {
+      return 'Submit Guess';
+    }
+    return `Waiting for others (${submittedPlayers}/${totalPlayers})`;
   }
 } 

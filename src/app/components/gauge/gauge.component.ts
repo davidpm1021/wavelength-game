@@ -210,40 +210,40 @@ export class GaugeComponent implements OnInit {
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.bottom;
     
-    // Calculate angle relative to center point
+    // Calculate relative mouse position from center
     const dx = event.clientX - centerX;
     const dy = centerY - event.clientY;
     
     // Get angle in degrees (atan2 returns angle in radians)
-    let angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    // Subtract 90 to make 0 degrees point to the right
+    let angle = (Math.atan2(dy, dx) * (180 / Math.PI)) - 90;
     
-    // Normalize to 0-180 range in the upper hemisphere
-    // We want:
-    // -90 (left) = 0 value
-    // 90 (right) = 100 value
+    // Normalize to 0-180 range
     if (angle < -90) angle = -90;
     if (angle > 90) angle = 90;
     
-    // Map -90 to 90 range to 0-100 value
-    // -90 (left) -> 0
-    // 90 (right) -> 100
-    const newValue = Math.round((angle + 90) / 180 * 100);
+    // Map -90 to 90 range to 100-0 value
+    // -90 = 100 (left)
+    // 0 = 50 (top)
+    // 90 = 0 (right)
+    const newValue = Math.round(100 - (((angle + 90) / 180) * 100));
     
-    // Add edge detection to make it easier to hit 0 and 100
+    // Add edge detection
     let finalValue = newValue;
     if (newValue <= 5) finalValue = 0;
     if (newValue >= 95) finalValue = 100;
     
     if (this.value !== finalValue) {
-      this.value = finalValue;
-      this.valueChange.emit(finalValue);
+        this.value = finalValue;
+        this.valueChange.emit(finalValue);
     }
   }
 
   getNeedleRotation(): number {
     // Convert 0-100 value to -90 to 90 degrees
-    // 0 value -> -90 degrees (left)
-    // 100 value -> 90 degrees (right)
-    return (this.value * 180 / 100) - 90;
+    // 0 value = -90 degrees (right)
+    // 50 value = 0 degrees (up)
+    // 100 value = 90 degrees (left)
+    return (this.value * 1.8) - 90;  // 1.8 = 180/100
   }
 } 

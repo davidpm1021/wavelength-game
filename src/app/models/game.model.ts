@@ -7,10 +7,17 @@ export interface Player {
 }
 
 export interface Question {
+  id: string;
+  text: string;
   leftConcept: string;
   rightConcept: string;
   correctPosition: number;
-  timeLimit: number;  // in seconds
+  category: string;
+  difficulty: string;
+  explanation?: string;
+  minValue?: number;
+  maxValue?: number;
+  unit?: string;
 }
 
 export interface GameState {

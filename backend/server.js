@@ -232,21 +232,88 @@ io.on('connection', (socket) => {
         startRound();
     });
 
-    socket.on('submitGuess', ({ position }) => {
-        if (gameState.gamePhase !== 'ROUND_IN_PROGRESS') return;
+    socket.on('submit-guess', ({ position, playerId, isDummy }) => {
+        console.log('Server: Received guess submission request:', {
+            socketId: socket.id,
+            playerId,
+            position,
+            isDummy,
+            gamePhase: gameState.gamePhase,
+            timestamp: new Date().toISOString()
+        });
 
-        const player = gameState.players.find(p => p.id === socket.id);
-        if (player && !player.hasSubmitted) {
-            player.hasSubmitted = true;
-            player._lastGuess = position;
-            
-            io.emit('gameStateUpdate', gameState);
+        if (gameState.gamePhase !== 'ROUND_IN_PROGRESS') {
+            console.log('Server: Rejecting submission - game not in progress:', {
+                currentPhase: gameState.gamePhase,
+                timestamp: new Date().toISOString()
+            });
+            return;
+        }
 
-            // Check if all players have submitted
-            if (gameState.players.every(p => p.hasSubmitted)) {
-                clearInterval(roundTimer);
-                endRound();
-            }
+        // Use the provided playerId if available, otherwise use socket.id
+        const targetPlayerId = playerId || socket.id;
+        const player = gameState.players.find(p => p.id === targetPlayerId);
+
+        console.log('Server: Processing guess submission:', {
+            targetPlayerId,
+            playerFound: !!player,
+            position,
+            isDummy,
+            currentPlayers: gameState.players.map(p => ({
+                id: p.id,
+                name: p.name,
+                hasSubmitted: p.hasSubmitted
+            }))
+        });
+
+        if (!player) {
+            console.error('Server: Player not found for submission:', {
+                targetPlayerId,
+                position,
+                isDummy,
+                allPlayerIds: gameState.players.map(p => p.id)
+            });
+            return;
+        }
+
+        if (player.hasSubmitted) {
+            console.log('Server: Player has already submitted:', {
+                playerId: player.id,
+                playerName: player.name,
+                timestamp: new Date().toISOString()
+            });
+            return;
+        }
+
+        player.hasSubmitted = true;
+        player._lastGuess = position;
+        
+        console.log('Server: Updated player submission status:', {
+            playerId: targetPlayerId,
+            playerName: player.name,
+            hasSubmitted: player.hasSubmitted,
+            lastGuess: player._lastGuess,
+            timestamp: new Date().toISOString()
+        });
+
+        io.emit('gameStateUpdate', gameState);
+
+        // Check if all players have submitted
+        const allSubmitted = gameState.players.every(p => p.hasSubmitted);
+        console.log('Server: Checking all submissions:', {
+            allSubmitted,
+            players: gameState.players.map(p => ({
+                id: p.id,
+                name: p.name,
+                hasSubmitted: p.hasSubmitted
+            })),
+            timestamp: new Date().toISOString()
+        });
+
+        if (allSubmitted) {
+            console.log('Server: All players have submitted, ending round');
+            clearInterval(roundTimer);
+            endRound();
         }
     });
 

@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { io, Socket } from 'socket.io-client';
 import { BehaviorSubject, Observable } from 'rxjs';
-import { GameState } from '../models/game.model';
+import { GameState, Player } from '../models/game.model';
 import { environment } from '../../environments/environment';
 
 @Injectable({
@@ -15,6 +15,7 @@ export class WebSocketService {
   private isDevelopment = !environment.production;
   private isConnecting = false;
   private pendingJoinData: { playerName: string } | null = null;
+  private dummyOpponentId: string | null = null;
 
   constructor() {
     console.log('WebSocketService: Initializing');
@@ -48,7 +49,15 @@ export class WebSocketService {
     });
 
     this.socket.on('gameStateUpdate', (state: GameState) => {
-      console.log('WebSocketService: Received game state update:', state);
+      console.log('WebSocket: Received game state update', {
+        phase: state.gamePhase,
+        round: state.currentRound,
+        players: state.players.map(p => ({
+          name: p.name,
+          id: p.id,
+          hasSubmitted: p.hasSubmitted
+        }))
+      });
       this.gameState.next(state);
     });
 
@@ -79,11 +88,12 @@ export class WebSocketService {
 
   private addDummyOpponent() {
     console.log('WebSocketService: Adding dummy opponent');
+    this.dummyOpponentId = 'dummy-' + Math.random().toString(36).substr(2, 9);
     this.socket.emit('addDummyPlayer', {
-      id: 'dummy-' + Math.random().toString(36).substr(2, 9),
-      name: 'Test Opponent',
-      isHost: false
+        name: 'Test Opponent',
+        id: this.dummyOpponentId
     });
+    console.log('WebSocketService: Sent dummy opponent add request');
   }
 
   joinGame(playerName: string): void {
@@ -109,8 +119,96 @@ export class WebSocketService {
   }
 
   submitGuess(position: number): void {
-    console.log('WebSocketService: Submitting guess:', position);
-    this.socket.emit('submitGuess', { position });
+    if (!this.socket.connected) {
+      console.error('WebSocket: Cannot submit guess - socket not connected', {
+        socketId: this.socket.id,
+        connected: this.socket.connected,
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    if (!this.playerId) {
+      console.error('WebSocket: Cannot submit guess - no player ID', {
+        socketId: this.socket.id,
+        playerId: this.playerId,
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    console.log('WebSocket: Attempting to submit guess', {
+      socketId: this.socket.id,
+      playerId: this.playerId,
+      position,
+      socketConnected: this.socket.connected,
+      hasDummyOpponent: !!this.dummyOpponentId,
+      timestamp: new Date().toISOString()
+    });
+
+    // Submit the player's guess with acknowledgment
+    this.socket.emit('submit-guess', { 
+      playerId: this.playerId,
+      position 
+    }, (response: { success: boolean }) => {
+      console.log('WebSocket: Server acknowledged guess submission', {
+        response,
+        playerId: this.playerId,
+        position,
+        timestamp: new Date().toISOString()
+      });
+    });
+
+    // Log current game state
+    const currentState = this.gameState.getValue();
+    console.log('WebSocket: Current game state at submission:', {
+      phase: currentState?.gamePhase,
+      round: currentState?.currentRound,
+      players: currentState?.players?.map(p => ({
+        id: p.id,
+        name: p.name,
+        hasSubmitted: p.hasSubmitted,
+        isCurrentPlayer: p.id === this.playerId,
+        isDummy: p.id === this.dummyOpponentId
+      }))
+    });
+
+    // If we have a dummy opponent, submit their guess after a delay
+    if (this.dummyOpponentId) {
+      console.log('WebSocket: Scheduling dummy opponent guess', {
+        dummyId: this.dummyOpponentId,
+        delay: 1500,
+        timestamp: new Date().toISOString()
+      });
+
+      setTimeout(() => {
+        if (!this.socket.connected) {
+          console.error('WebSocket: Cannot submit dummy guess - socket disconnected');
+          return;
+        }
+
+        const dummyPosition = Math.floor(Math.random() * 100);
+        console.log('WebSocket: Submitting dummy opponent guess', {
+          dummyId: this.dummyOpponentId,
+          position: dummyPosition,
+          socketConnected: this.socket.connected,
+          timestamp: new Date().toISOString()
+        });
+
+        this.socket.emit('submit-guess', {
+          playerId: this.dummyOpponentId,
+          position: dummyPosition,
+          isDummy: true
+        }, (response: { success: boolean }) => {
+          console.log('WebSocket: Server acknowledged dummy guess submission', {
+            response,
+            dummyId: this.dummyOpponentId,
+            position: dummyPosition,
+            timestamp: new Date().toISOString()
+          });
+        });
+      }, 1500);
+    }
   }
 
   startGame(): void {
