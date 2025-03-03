@@ -481,16 +481,25 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('startGame', () => {
+    socket.on('startGame', (data) => {
         const player = gameState.players.find(p => p.id === socket.id);
         if (!player?.isHost) return;
 
+        console.log('Starting game with config:', data);
+
         gameState.isGameStarted = true;
         gameState.currentRound = 0;
-        // Use questions from client config instead of random questions
-        gameState.questions = data.gameConfig.questions;
+        gameState.questions = data?.gameConfig?.questions || [];
+        gameState.totalRounds = data?.gameConfig?.rounds || TOTAL_ROUNDS;
         gameState.players.forEach(p => p.score = 0);
         
+        if (!gameState.questions || gameState.questions.length === 0) {
+            console.error('No questions provided in game config');
+            socket.emit('error', { message: 'No questions available' });
+            return;
+        }
+
+        console.log('Game starting with questions:', gameState.questions);
         startRound();
     });
 
