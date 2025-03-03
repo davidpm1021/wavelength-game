@@ -853,7 +853,7 @@ import { GaugeComponent } from '../gauge/gauge.component';
       </div>
     </div>
 
-    <div *ngIf="showTutorial" class="tutorial-overlay">
+    <div *ngIf="showStartPrompt" class="tutorial-overlay">
       <div class="tutorial-card">
         <h2 class="tutorial-title">How to Play Wavelength</h2>
         
@@ -897,7 +897,6 @@ export class GameBoardComponent implements OnInit, OnDestroy {
   currentQuestionId: string | null = null;
   canSubmitGuess: boolean = true;
   GamePhase = GamePhase;
-  showTutorial = false;
   debugLogs: string[] = [];
   targetValue: number = 0;
   showStartPrompt = false;
@@ -946,84 +945,6 @@ export class GameBoardComponent implements OnInit, OnDestroy {
           this.sliderValue = 50;
           this.canSubmitGuess = true;
         }
-      }
-
-      // Handle phase transitions
-      if (oldPhase !== state?.gamePhase) {
-        this.addDebugLog('Phase change', {
-          from: oldPhase,
-          to: state?.gamePhase,
-          round: state?.currentRound,
-          allSubmitted: this.haveAllPlayersSubmitted()
-        });
-
-        if (state?.gamePhase === GamePhase.SHOWING_RESULTS) {
-          this.updatePlayerScores();
-          
-          const currentRound = state.currentRound || 0;
-          this.addDebugLog('Checking end game condition', {
-            currentRound,
-            isLastRound: this.checkEndGameCondition(currentRound),
-          });
-          
-          if (this.checkEndGameCondition(currentRound)) {
-            // Both host and non-host should handle this
-            if (this.isHost) {
-              setTimeout(() => {
-                // Double check we're still in SHOWING_RESULTS phase
-                if (this.gameState?.gamePhase === GamePhase.SHOWING_RESULTS) {
-                  this.addDebugLog('Host: Attempting to end game');
-                  this.webSocketService.endGame();
-                  
-                  // Add fallback for host as well
-                  setTimeout(() => {
-                    if (this.gameState?.gamePhase === GamePhase.SHOWING_RESULTS) {
-                      this.addDebugLog('Host: No server response, forcing game over state');
-                      if (this.gameState) {
-                        this.gameState = { ...this.gameState, gamePhase: GamePhase.GAME_OVER };
-                      }
-                    }
-                  }, 2000); // Wait 2 seconds after sending endGame
-                }
-              }, 5000);
-            } else {
-              this.addDebugLog('Non-host: Waiting for game end');
-              // Non-host players should prepare for game end
-              setTimeout(() => {
-                if (this.gameState?.gamePhase === GamePhase.SHOWING_RESULTS) {
-                  this.addDebugLog('Non-host: Still in SHOWING_RESULTS after timeout, forcing game over state');
-                  // Force a local transition to GAME_OVER if the server hasn't responded
-                  if (this.gameState) {
-                    this.gameState = { ...this.gameState, gamePhase: GamePhase.GAME_OVER };
-                  }
-                }
-              }, 6000); // Wait slightly longer than host timeout
-            }
-          } else if (this.isHost) {
-            setTimeout(() => {
-              if (this.gameState?.gamePhase === GamePhase.SHOWING_RESULTS) {
-                this.addDebugLog('Moving to next round');
-                this.webSocketService.nextRound();
-              }
-            }, 5000);
-          }
-        }
-      }
-
-      // Update game state based on phase
-      if (state?.gamePhase === GamePhase.ROUND_IN_PROGRESS) {
-        const currentPlayer = state.players.find(p => p.id === this.webSocketService.playerId);
-        this.canSubmitGuess = !(currentPlayer?.hasSubmitted ?? true);
-      } else {
-        this.canSubmitGuess = false;
-      }
-
-      // Show tutorial only at the start
-      if (state?.gamePhase === GamePhase.WAITING_FOR_PLAYERS && 
-          this.isHost && 
-          !state.isGameStarted &&
-          !this.gameState?.currentRound) {
-        this.showTutorial = true;
       }
 
       // Show start prompt only for host in waiting state
@@ -1323,7 +1244,7 @@ export class GameBoardComponent implements OnInit, OnDestroy {
   }
 
   skipTutorial(): void {
-    this.showTutorial = false;
+    this.showStartPrompt = false;
     if (this.isHost) {
       this.startGame();
     }

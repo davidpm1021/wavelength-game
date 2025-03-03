@@ -2,6 +2,82 @@
 
 ## Latest Updates (March 4, 2025)
 
+### Ongoing Issue: Persistent Tutorial Display
+- **Issue Description**: Tutorial overlay still appears after name submission despite code changes
+- **Attempted Fixes**:
+  1. Removed tutorial-related code from game-board component
+  2. Replaced with host-only start prompt
+  3. Updated component initialization logic
+- **Current Status**: ❌ Issue persists
+- **Next Steps**: Fresh investigation needed with new perspective
+
+### Simplified Game Start Flow
+- **Changes Made**:
+  1. Removed tutorial overlay since tutorial content is covered on login screen
+  2. Added host-only start game prompt
+  3. Non-host players only see the waiting screen
+  4. Game can now start without reaching player cap
+- **Status**: ✅ Implemented and tested
+
+### Fixed: Score Calculation Double Normalization
+- **Issue Resolution**: Fixed incorrect score calculations caused by double normalization of input values
+- **Changes Made**:
+  1. Modified `submit-guess` handler to store original position values
+  2. Updated score calculation to prevent double normalization
+  3. Improved logging for better debugging
+- **Verification**:
+  ```
+  Before Fix:
+  Input: 600 (BE word count)
+  First normalize: 50
+  Second normalize: -87.5 (incorrect)
+  
+  After Fix:
+  Input: 600 (BE word count)
+  Single normalize: 72.25 (correct)
+  ```
+
+### Current Status
+1. **Game Configuration**: ✅ Working
+   - Configuration persists between join and start
+   - Questions load correctly
+   - Ranges are properly preserved
+   - Host-only game start implemented
+
+2. **Score Calculation**: ✅ Fixed
+   - Original values preserved
+   - Single normalization during calculation
+   - Accurate scoring across all ranges
+
+3. **Game Flow**: ✅ Functioning
+   - Player join/leave working
+   - Round progression stable
+   - Results display accurate
+   - Simplified start game process
+
+### Next Steps
+1. **Testing & Validation**:
+   - Verify score accuracy across all question types
+   - Test edge cases in value ranges
+   - Monitor performance with multiple players
+
+2. **Improvements**:
+   - Add input validation for question ranges
+   - Implement score history tracking
+   - Consider adding round time adjustments
+
+3. **Technical Debt**:
+   - GitHub security vulnerabilities noted but not prioritized
+   - Optimize WebSocket event handling
+   - Improve error recovery mechanisms
+
+### Lessons Learned
+1. Value transformation should be transparent and traceable
+2. Store original values when possible
+3. Implement comprehensive logging for debugging
+4. Test calculations with various ranges
+5. Validate data at each transformation step
+
 ### Current Issue: Game Configuration Not Being Passed Correctly
 - **Issue Description**: Questions are not loading when starting the game. The server receives `null` for game configuration despite the client having valid questions.
 - **Symptoms**:

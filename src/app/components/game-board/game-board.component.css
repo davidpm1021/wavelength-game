@@ -1,0 +1,174 @@
+/* Start prompt overlay styles */
+.start-prompt-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1100;
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Game board styles */
+:host {
+    display: block;
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+.game-board-container {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+}
+
+.game-content {
+  width: 100%;
+  max-width: 800px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.blur-background {
+  filter: blur(4px);
+  pointer-events: none;
+}
+
+.start-prompt {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.prompt-card {
+  background-color: white;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  max-width: 400px;
+}
+
+.start-button {
+  margin-top: 20px;
+  padding: 10px 20px;
+  font-size: 1.1em;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.start-button:hover {
+  background-color: #45a049;
+}
+
+.question-display {
+  margin: 20px 0;
+  text-align: center;
+}
+
+.slider-section {
+  width: 100%;
+  max-width: 500px;
+  margin: 20px 0;
+}
+
+input[type="range"] {
+  width: 100%;
+}
+
+.slider-value {
+  text-align: center;
+  margin-top: 10px;
+  font-size: 1.2em;
+}
+
+.submit-button {
+  padding: 10px 20px;
+  font-size: 1.1em;
+  background-color: #2196F3;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.submit-button:hover {
+  background-color: #1976D2;
+}
+
+.submit-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.results-display {
+  margin: 20px 0;
+  text-align: center;
+}
+
+.target-value {
+  font-size: 1.2em;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.player-guesses {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.player-list {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.player-item {
+  margin: 5px 0;
+}
+
+.debug-panel {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 10px;
+  border-radius: 5px;
+  max-width: 300px;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 12px;
+  z-index: 1000;
+}
+
+.debug-logs {
+  margin-top: 10px;
+} 

@@ -1,0 +1,49 @@
+<div class="game-container">
+    <!-- Start Game Prompt Overlay for Host -->
+    <div *ngIf="showStartPrompt && isHost" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4 text-center">
+            <h2 class="text-2xl font-bold mb-4">Ready to Start?</h2>
+            <p class="mb-6">You can start the game now or wait for more players to join.</p>
+            <div class="flex justify-center gap-4">
+                <button (click)="startGame()" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold">
+                    Start Game
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div *ngIf="gameState" class="game-content">
+        <div class="game-header">
+            <h1 class="game-title">Wavelength</h1>
+            <p class="game-subtitle">Find the sweet spot!</p>
+        </div>
+
+        <div class="player-info">
+            <div *ngFor="let player of gameState.players" class="player">
+                <div class="player-avatar">{{ getPlayerInitials(player) }}</div>
+                <div>
+                    <div class="player-name">{{ player.name }}</div>
+                    <div class="player-score">Score: {{ player.score }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div *ngIf="gameState.currentQuestion" class="game-content">
+            <app-gauge
+                [value]="sliderPosition"
+                [leftLabel]="gameState.currentQuestion.leftConcept"
+                [rightLabel]="gameState.currentQuestion.rightConcept"
+                (valueChange)="onSliderChange($event)"
+            ></app-gauge>
+
+            <div class="submit-container">
+                <button 
+                    (click)="submitGuess()"
+                    [disabled]="!canSubmitGuess"
+                >
+                    Submit Guess
+                </button>
+            </div>
+        </div>
+    </div>
+</div> 
