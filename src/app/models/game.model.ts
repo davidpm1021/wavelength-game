@@ -30,8 +30,11 @@ export interface GameState {
   players: Player[];
   gamePhase: GamePhase;
   currentRound: number;
+  totalRounds: number;
   currentQuestion?: Question;
   isGameStarted: boolean;
+  roundTimeRemaining: number;
+  roundResults: RoundResult | null;
 }
 
 export interface RoundResult {

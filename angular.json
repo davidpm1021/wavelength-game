@@ -17,7 +17,7 @@
         "build": {
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
-            "outputPath": "docs",
+            "outputPath": "dist/wavelength-game",
             "index": "src/index.html",
             "main": "src/main.ts",
             "polyfills": [
@@ -32,7 +32,8 @@
               "@angular/material/prebuilt-themes/indigo-pink.css",
               "src/styles.css"
             ],
-            "scripts": []
+            "scripts": [],
+            "baseHref": "/wavelength-game/"
           },
           "configurations": {
             "production": {
@@ -48,8 +49,7 @@
                   "maximumError": "15kb"
                 }
               ],
-              "outputHashing": "all",
-              "baseHref": "/wavelength-game/"
+              "outputHashing": "all"
             },
             "development": {
               "buildOptimizer": false,

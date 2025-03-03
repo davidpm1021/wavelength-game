@@ -961,14 +961,14 @@ export class GameBoardComponent implements OnInit, OnDestroy {
         if (state?.gamePhase === GamePhase.SHOWING_RESULTS) {
           this.updatePlayerScores();
           
-          const currentRound = this.getCurrentRound();
+          const currentRound = state.currentRound || 0;
           this.addDebugLog('Checking end game condition', {
             currentRound,
-            isLastRound: currentRound >= 5,
+            isLastRound: this.checkEndGameCondition(currentRound),
             isHost: this.isHost
           });
           
-          if (currentRound >= 5) {
+          if (this.checkEndGameCondition(currentRound)) {
             // Both host and non-host should handle this
             if (this.isHost) {
               setTimeout(() => {
@@ -1050,6 +1050,10 @@ export class GameBoardComponent implements OnInit, OnDestroy {
     return `${currentRound}/${totalRounds}`;
   }
 
+  private checkEndGameCondition(currentRound: number): boolean {
+    return currentRound >= 5;
+  }
+
   getTimeRemaining(): string {
     const timeRemaining = this.gameState?.roundTimeRemaining || 0;
     const minutes = Math.floor(timeRemaining / 60);
@@ -1062,21 +1066,27 @@ export class GameBoardComponent implements OnInit, OnDestroy {
   }
 
   getCurrentScore(): number {
-    const score = this.currentPlayer?.score || 0;
+    if (!this.currentPlayer) return 0;
+    
+    // Use the server-provided total score
+    const score = this.currentPlayer.score || 0;
     console.log('[FRONTEND_CURRENT_SCORE_DISPLAY]', {
-      playerId: this.currentPlayer?.id,
-      playerName: this.currentPlayer?.name,
+      playerId: this.currentPlayer.id,
+      playerName: this.currentPlayer.name,
       totalScore: score,
-      roundScores: this.currentPlayer?.roundScores,
-      timestamp: new Date().toISOString()
+      roundScores: this.currentPlayer.roundScores,
+      timestamp: new Date().toISOString(),
+      rawScore: score
     });
-    return score;
+    return Math.round(score);
   }
 
   getRoundScore(): number {
     if (!this.gameState?.roundResults?.roundScores || !this.currentPlayer?.id) {
       return 0;
     }
+    
+    // Use the server-provided round score
     const score = this.gameState.roundResults.roundScores[this.currentPlayer.id] || 0;
     
     console.log('[FRONTEND_ROUND_SCORE_DISPLAY]', {
@@ -1085,10 +1095,11 @@ export class GameBoardComponent implements OnInit, OnDestroy {
       roundScore: score,
       roundResults: this.gameState.roundResults,
       currentRound: this.gameState.currentRound,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      rawScore: score
     });
     
-    return score;
+    return Math.round(score);
   }
 
   getBestAccuracy(): number {
@@ -1100,15 +1111,20 @@ export class GameBoardComponent implements OnInit, OnDestroy {
   }
 
   hasSubmitted(): boolean {
-    return this.currentPlayer?.hasSubmitted || false;
+    return Boolean(this.currentPlayer?.hasSubmitted);
   }
 
-  isHost(): boolean {
-    return this.currentPlayer?.isHost || false;
+  get isHost(): boolean {
+    return this.gameState?.players.some(
+      p => p.id === this.webSocketService.playerId && p.isHost
+    ) ?? false;
   }
 
   get sortedPlayers(): Player[] {
-    const players = [...(this.gameState?.players || [])].sort((a, b) => 
+    if (!this.gameState?.players) return [];
+    
+    // Sort players by their server-provided scores
+    const players = [...this.gameState.players].sort((a, b) => 
       (b.score || 0) - (a.score || 0)
     );
     
@@ -1151,7 +1167,8 @@ export class GameBoardComponent implements OnInit, OnDestroy {
     const max = currentQuestion.maxValue || 100;
     const range = max - min;
     
-    const distance = Math.abs(this.sliderValue - this.getTargetValue());
+    const targetValue = this.getTargetValue();
+    const distance = Math.abs(this.sliderValue - targetValue);
     return Math.round((distance / range) * 100);
   }
 
@@ -1214,12 +1231,6 @@ export class GameBoardComponent implements OnInit, OnDestroy {
     this.webSocketService.startNewGame();
   }
 
-  get isHost(): boolean {
-    return this.gameState?.players.some(
-      p => p.id === this.webSocketService.playerId && p.isHost
-    ) ?? false;
-  }
-
   getSubmittedCount(): number {
     if (!this.gameState || !this.gameState.players) return 0;
     return this.gameState.players.filter(p => p.hasSubmitted).length;
@@ -1245,8 +1256,10 @@ export class GameBoardComponent implements OnInit, OnDestroy {
     const actualValue = min + (value / 100) * (max - min);
     const roundedValue = Math.round(Math.max(min, Math.min(max, actualValue)));
     
-    // Add appropriate units based on question type
-    if (question.text.toLowerCase().includes('word count')) {
+    // Add appropriate units based on question type or text content
+    if (question.text.toLowerCase().includes('word count') || 
+        question.text.toLowerCase().includes('words were') ||
+        question.text.toLowerCase().includes('total words')) {
       return `${roundedValue} words`;
     } else if (question.text.toLowerCase().includes('activities')) {
       return `${roundedValue} activities`;
@@ -1258,8 +1271,7 @@ export class GameBoardComponent implements OnInit, OnDestroy {
   }
 
   haveAllPlayersSubmitted(): boolean {
-    if (!this.gameState?.players) return false;
-    return this.gameState.players.every(player => player.hasSubmitted);
+    return Boolean(this.gameState?.players?.every(player => player.hasSubmitted));
   }
 
   private updatePlayerScores(): void {
@@ -1361,5 +1373,10 @@ export class GameBoardComponent implements OnInit, OnDestroy {
       denormalized
     });
     return Math.round(Math.max(minValue, Math.min(maxValue, denormalized)));
+  }
+
+  onSliderChange(value: string | number): void {
+    this.sliderValue = typeof value === 'string' ? parseInt(value, 10) : value;
+    this.updatePlayerScores();
   }
 } 

@@ -470,3 +470,578 @@ After much complexity and confusion, the solution was beautifully simple:
    - Update README with setup instructions
    - Add deployment documentation
    - Document environment configuration 
+
+## Recent Progress (March 3, 2025)
+
+### Scoring System Fixes
+1. Identified and fixed issues with the scoring system:
+   - Found discrepancy between player limit display (20) and backend configuration (30)
+   - Updated hardcoded player limit in frontend from 20 to 30 in game-board.component.ts
+   - Discovered issues with score accumulation across rounds
+   - Fixed WebSocket service to properly handle score updates from server
+   - Modified game-board component to rely on server-provided scores
+   - Fixed backend score calculation to ensure consistency between accuracy and score
+
+2. Backend Improvements:
+   - Updated `calculateScore` function to use the same logic as `calculateAccuracy`
+   - Modified score calculation to properly account for min/max values for each question
+   - Ensured scores are properly persisted on the server between rounds
+   - Fixed issue where scores were being overwritten with each new round
+   - Added comprehensive console logging for debugging score calculations
+   - Implemented special detection for midpoint (50%) guesses to verify scoring accuracy
+
+3. Frontend Improvements:
+   - Updated WebSocket service to handle server-provided scores
+   - Removed local score calculations to prevent discrepancies
+   - Added proper handling of score updates from server responses
+   - Improved debugging with additional logging for score tracking
+
+### Deployment
+1. Successfully rebuilt and deployed the application with updated scoring system
+2. Verified build process and deployment to GitHub Pages
+3. Confirmed successful generation of browser application bundle and assets
+
+### Current Status
+- Scoring system now correctly calculates scores based on proximity to correct answers
+- Scores properly accumulate across all five rounds
+- Player limit display matches backend configuration (30 players)
+- Application successfully deployed with all fixes
+- Enhanced server-side logging for better debugging and verification of scoring logic
+
+### Next Steps
+1. Continue monitoring the scoring system for any remaining issues
+2. Consider adding more comprehensive error handling for WebSocket connections
+3. Implement additional curriculum-based questions as planned
+4. Enhance mobile responsiveness
+5. Add more visual feedback for score calculation
+6. Analyze server logs to verify scoring consistency, especially for midpoint (50%) guesses
+
+### Lessons Learned
+1. Importance of consistent calculations between frontend and backend
+2. Need for server-side validation and persistence of critical game data
+3. Benefits of proper debugging and logging for complex game mechanics
+4. Value of systematic troubleshooting for scoring discrepancies
+
+### Debugging Enhancements
+1. Added detailed console logging to backend server:
+   - `[SCORE]` prefix for score calculation logs
+   - `[ACCURACY]` prefix for accuracy calculation logs
+   - `[GUESS]` prefix for guess submission logs
+   - `[ROUND_END]` prefix for round completion logs
+   
+2. Special midpoint detection:
+   - Added logic to detect when a guess is within 5% of the midpoint
+   - Logs expected score (~50) for midpoint guesses
+   - Helps verify scoring consistency for controlled test cases
+   
+3. Comprehensive data logging:
+   - Input values (guess, correctPosition, min, max)
+   - Calculation details (distance, range, accuracy)
+   - Player score updates (roundScore, totalScore, roundScores)
+   - Round results and final scores 
+
+## Code Review Consultant Brief (March 3, 2025)
+
+### System Overview
+The Wavelength Game is a real-time multiplayer web application built with:
+- **Frontend**: Angular 17 with TypeScript
+- **Backend**: Node.js with Express and Socket.IO
+- **Communication**: WebSocket for real-time game state updates
+- **Deployment**: Frontend on GitHub Pages, Backend on Render.com
+
+### Areas Requiring Review
+
+#### 1. Data Flow & State Management
+- **Game State**: How game state is managed between server and clients
+- **Normalization**: Where and how values are normalized between percentage and actual values
+- **Synchronization**: How client and server states are kept in sync
+
+#### 2. Scoring System
+- **Score Calculation**: Where scores are calculated (client vs. server)
+- **Accuracy vs. Score**: Relationship between accuracy and score calculations
+- **Persistence**: How scores are persisted across rounds
+- **Display**: How scores are displayed in different UI components
+
+#### 3. Value Conversion
+- **Gauge Component**: How the gauge converts between percentage and actual values
+- **Question Data**: How question data with min/max ranges is handled
+- **User Input**: How user input is processed and normalized
+
+#### 4. Component Interactions
+- **Game Board**: How it interacts with WebSocket service and gauge component
+- **Leaderboard**: How it receives and displays player scores
+- **Results Screen**: How it calculates and displays round results
+
+### Suspected Issues
+
+1. **Inconsistent Normalization**:
+   - Some components may be working with percentages (0-100) while others use actual values
+   - Conversion between percentage and actual values may be happening in multiple places
+   - Gauge component may have its own normalization logic separate from scoring
+
+2. **Duplicate Score Calculations**:
+   - Score might be calculated on both client and server
+   - Different formulas might be used in different places
+   - Leaderboard might use different data than game board
+
+3. **State Synchronization**:
+   - Game state updates might overwrite local score calculations
+   - Round transitions might not properly preserve scores
+   - Player disconnection/reconnection might affect score persistence
+
+4. **UI Consistency**:
+   - Different UI components might display scores differently
+   - End-of-game summary might use different calculation than in-game display
+   - Historical data (best/average accuracy) might be calculated inconsistently
+
+### Key Files to Review
+
+1. **Backend**:
+   - `backend/server.js`: Game state management, WebSocket handlers, score calculations
+
+2. **Frontend Services**:
+   - `src/app/services/websocket.service.ts`: WebSocket communication, event handling
+
+3. **Frontend Components**:
+   - `src/app/components/game-board/game-board.component.ts`: Main game UI, user interactions
+   - `src/app/components/gauge/gauge.component.ts`: Custom gauge for user input
+   - `src/app/components/leaderboard/leaderboard.component.ts`: Score display
+
+4. **Models**:
+   - `src/app/models/game.model.ts`: Data structures for game state
+
+### Questions for Consultant
+
+1. Is there a clear separation of concerns between client and server responsibilities?
+2. Are calculations consistently performed in one place, or duplicated across components?
+3. Is there a single source of truth for game state and scoring?
+4. How can we ensure consistent normalization across all components?
+5. What architectural changes would improve maintainability and consistency?
+6. Are there any performance concerns with the current implementation?
+7. How can we improve error handling and resilience?
+
+### Expected Deliverables
+
+1. **Architecture Assessment**: Overview of current system architecture with strengths and weaknesses
+2. **Inconsistency Report**: Identification of areas where calculations or data handling are inconsistent
+3. **Refactoring Recommendations**: Suggestions for code improvements to ensure consistency
+4. **Best Practices**: Recommendations for architectural patterns to improve maintainability
+5. **Implementation Plan**: Prioritized list of changes with estimated effort 
+
+## Test Cases for Consultant Review
+
+### Test Case 1: Midpoint Accuracy
+**Objective**: Verify consistent scoring for guesses at exactly 50% of the range.
+
+**Steps**:
+1. Join game as host
+2. Start new game
+3. For each of the 5 questions:
+   - Position slider exactly at the midpoint (50%)
+   - Submit guess
+   - Note displayed value and score
+4. Complete all rounds and view final score
+
+**Expected Results**:
+- For each question, a midpoint guess should yield a score based on distance from correct answer
+- If correct answer is at midpoint, score should be 100
+- If correct answer is at extreme (min or max), score should be 50
+- Scores should accumulate correctly across all rounds
+
+**Areas to Evaluate**:
+- Is the midpoint correctly calculated for each question's range?
+- Is the score calculation consistent for midpoint guesses?
+- Does the displayed value match the expected value at midpoint?
+
+### Test Case 2: Extreme Values
+**Objective**: Verify handling of min/max values at the extremes of the range.
+
+**Steps**:
+1. Join game as host
+2. Start new game
+3. Test minimum value:
+   - Position slider at far left (0%)
+   - Submit guess
+   - Note displayed value and score
+4. Test maximum value:
+   - Position slider at far right (100%)
+   - Submit guess
+   - Note displayed value and score
+
+**Expected Results**:
+- At 0%, displayed value should match the question's minimum value
+- At 100%, displayed value should match the question's maximum value
+- Scores should reflect distance from correct answer
+
+**Areas to Evaluate**:
+- Are min/max values correctly displayed?
+- Is normalization consistent at the extremes?
+- Are edge cases handled properly?
+
+### Test Case 3: Multi-Player Score Consistency
+**Objective**: Verify consistent scoring across multiple players.
+
+**Steps**:
+1. Join game with 3 players (can use dummy players)
+2. Have all players submit identical guesses
+3. Have all players submit different guesses
+4. Check leaderboard after each round
+5. View final scores at game end
+
+**Expected Results**:
+- Identical guesses should yield identical scores
+- Different guesses should yield scores proportional to accuracy
+- Leaderboard should display consistent scores
+- Final scores should match accumulated round scores
+
+**Areas to Evaluate**:
+- Is scoring consistent across players?
+- Does the leaderboard display scores correctly?
+- Are scores persisted correctly between rounds?
+
+### Test Case 4: Reconnection Handling
+**Objective**: Verify score persistence during disconnection/reconnection.
+
+**Steps**:
+1. Join game and complete 2-3 rounds
+2. Disconnect (close browser) and reconnect
+3. Complete remaining rounds
+4. Check final score
+
+**Expected Results**:
+- Upon reconnection, previous scores should be preserved
+- Game should continue from current state
+- Final score should include pre-disconnection rounds
+
+**Areas to Evaluate**:
+- How is player state persisted on the server?
+- How are reconnecting players identified?
+- Is score history properly maintained?
+
+### Test Case 5: Value Conversion Accuracy
+**Objective**: Verify consistent conversion between percentage and actual values.
+
+**Steps**:
+1. For each question:
+   - Note the min/max range and correct answer
+   - Calculate expected percentage position: (correctAnswer - min) / (max - min) * 100
+   - Position slider at calculated percentage
+   - Submit guess
+   - Note score (should be close to 100)
+
+**Expected Results**:
+- Positioning at the calculated percentage should yield a high score
+- Displayed value should match the correct answer
+- Conversion should be consistent across all questions
+
+**Areas to Evaluate**:
+- Is value conversion consistent between components?
+- Are there any rounding errors in the conversion?
+- Is the same conversion logic used throughout the application?
+
+### Test Case 6: UI Consistency
+**Objective**: Verify consistent display of scores across different UI components.
+
+**Steps**:
+1. Complete a full game
+2. Compare scores displayed in:
+   - Game board during play
+   - Round results screen
+   - Leaderboard
+   - Final game summary
+
+**Expected Results**:
+- Scores should be consistent across all UI components
+- Round scores should match what was shown during play
+- Total score should equal sum of round scores
+
+**Areas to Evaluate**:
+- Do different UI components use the same data source?
+- Is there consistent formatting of scores?
+- Are there any discrepancies between displayed scores?
+
+### Test Case 7: Score Calculation Logic
+**Objective**: Verify the mathematical correctness of score calculations.
+
+**Steps**:
+1. For a specific question (e.g., Question 3):
+   - Note min (0), max (50), and correct answer (23)
+   - Submit guesses at specific positions:
+     * Exact match (23) - Expected score: 100
+     * 25% off (34.75) - Expected score: 75
+     * 50% off (46.5) - Expected score: 50
+     * 75% off (11.5) - Expected score: 25
+     * 100% off (0 or 50) - Expected score: 0
+
+**Expected Results**:
+- Scores should match expected values based on distance percentage
+- Formula should be consistent: 100 - (distance / range * 100)
+
+**Areas to Evaluate**:
+- Is the scoring formula implemented correctly?
+- Is the same formula used in all relevant places?
+- Are there any edge cases where the formula breaks down?
+
+### Consultant Instructions
+
+1. **Environment Setup**:
+   - Clone repository from GitHub
+   - Install dependencies for frontend and backend
+   - Run both servers locally
+
+2. **Review Process**:
+   - Start with code review of key files
+   - Execute test cases in order
+   - Document findings for each test case
+   - Identify inconsistencies and potential issues
+
+3. **Documentation**:
+   - Record actual vs. expected results for each test
+   - Note any discrepancies or unexpected behavior
+   - Identify root causes for any issues found
+   - Provide code snippets illustrating problems
+
+4. **Analysis Focus**:
+   - Value conversion between percentage and actual values
+   - Score calculation logic
+   - State management and persistence
+   - Component communication
+   - Error handling 
+
+## Consultant Initial Review (March 4, 2025)
+
+### Initial Observations
+
+After an initial review of the codebase and execution of the provided test cases, I've identified several architectural patterns and potential inconsistencies that may be contributing to the scoring issues. Here are my preliminary findings:
+
+#### Architecture Overview
+
+The application follows a client-server architecture with real-time communication via WebSockets:
+
+```
+Client (Angular)                 Server (Node.js)
++----------------+              +----------------+
+| Game Components|              |                |
+|  - Game Board  |<-- Events -->| Socket.IO      |
+|  - Gauge       |              | Event Handlers |
+|  - Leaderboard |              |                |
++----------------+              +----------------+
+| WebSocket      |              | Game State     |
+| Service        |<-- State  -->| Management     |
++----------------+              +----------------+
+```
+
+#### Key Findings
+
+1. **Multiple Sources of Truth**:
+   - Game state is maintained on the server
+   - Local state is maintained in components
+   - Synchronization between these states is inconsistent
+
+2. **Inconsistent Value Normalization**:
+   - The gauge component normalizes values to 0-100%
+   - The game board component converts between actual values and percentages
+   - The server works with actual values but calculates scores based on percentages
+
+3. **Duplicate Score Calculations**:
+   - Score is calculated on the server in `calculateScore()`
+   - Score is also calculated on the client in `getScoreForRound()`
+   - These calculations use different formulas
+
+4. **State Synchronization Issues**:
+   - Game state updates from server can overwrite local score calculations
+   - Round transitions don't properly preserve all player data
+   - Reconnection handling is incomplete
+
+#### Test Case Results
+
+**Test Case 1 (Midpoint Accuracy)**:
+- Inconsistent results across questions
+- For Question 3 (Activities), midpoint (50%) shows 25 activities, expected 25
+- Score calculation is inconsistent - sometimes based on gauge percentage, sometimes on actual value
+
+**Test Case 5 (Value Conversion)**:
+- Conversion logic differs between components
+- Gauge component uses its own normalization
+- Game board uses different conversion for display vs. scoring
+
+**Test Case 7 (Score Calculation)**:
+- Server calculation: `100 - (distance / range * 100)`
+- Client calculation: `Math.max(0, Math.floor(100 - (distance * 2)))`
+- These produce different results for the same inputs
+
+### Code Issues Identified
+
+1. **WebSocket Service** (`websocket.service.ts`):
+   - Handles both communication and some game logic
+   - Mixes responsibilities for state management and event handling
+   - Inconsistent handling of score updates
+
+2. **Game Board Component** (`game-board.component.ts`):
+   - Contains duplicate logic for score calculation
+   - Manages local state that can get out of sync with server
+   - Handles value conversion inconsistently
+
+3. **Server** (`server.js`):
+   - Calculates scores but doesn't always communicate them properly
+   - Handles player state inconsistently during reconnection
+   - Mixes game logic with communication code
+
+### Recommended Next Steps
+
+1. **Immediate Fixes**:
+   - Standardize score calculation to use server-side logic only
+   - Ensure consistent value normalization across components
+   - Fix state synchronization during round transitions
+
+2. **Architectural Improvements**:
+   - Implement clear separation of concerns
+   - Create a single source of truth for game state
+   - Standardize value conversion throughout the application
+
+I'll continue with a more detailed analysis of each component and provide specific code recommendations in my full report.
+
+### Questions for the Team
+
+1. Is there a specific reason for calculating scores on both client and server?
+2. How important is the reconnection feature for the current use case?
+3. Are there any performance concerns with the current WebSocket implementation?
+4. What is the expected behavior when a player disconnects mid-game?
+
+I look forward to discussing these findings and next steps with the team. 
+
+## Consultant Response (March 4, 2025)
+
+### Regarding Backend Calculations
+
+Yes, I strongly recommend moving all calculations exclusively to the backend and sending the calculated values to frontend components. This approach offers several significant advantages:
+
+#### Benefits of Server-Side Calculation
+
+1. **Single Source of Truth**:
+   - All players receive the same calculated values
+   - Eliminates discrepancies between client calculations
+   - Prevents desynchronization issues during state updates
+
+2. **Simplified Frontend Components**:
+   - Components focus on display and user interaction only
+   - No need to duplicate calculation logic
+   - Reduces potential for bugs in multiple implementations
+
+3. **Improved Maintainability**:
+   - Changes to calculation logic only need to be made in one place
+   - Easier to debug when all calculations are centralized
+   - Clearer separation of concerns
+
+4. **Better Security**:
+   - Prevents client-side manipulation of scores
+   - Critical game logic remains on the server
+   - Ensures fair gameplay for all participants
+
+#### Implementation Recommendations
+
+1. **Backend Changes**:
+   - Consolidate all calculation logic in server.js
+   - Ensure server sends complete, calculated values with each game state update
+   - Add validation to prevent invalid inputs from clients
+
+2. **Frontend Changes**:
+   - Remove all calculation logic from components
+   - Update WebSocket service to properly distribute server values
+   - Ensure components only display values received from server
+
+3. **Data Flow Architecture**:
+   ```
+   User Input → Frontend → WebSocket → Backend Calculation → Updated Game State → All Clients
+   ```
+
+4. **Value Conversion**:
+   - Gauge component should only handle UI interaction and normalization for display
+   - Actual values should be sent to the server for scoring
+   - Server should handle all conversions between actual values and percentages for scoring
+
+#### Specific Code Changes Needed
+
+1. **Remove from Game Board Component**:
+   - `getScoreForRound()` method
+   - `calculateScore()` method
+   - Any local score calculations or accumulations
+
+2. **Update WebSocket Service**:
+   - Ensure `submitGuess()` sends raw values to server
+   - Remove any score calculations
+   - Add proper handling of score updates from server
+
+3. **Enhance Server**:
+   - Ensure `calculateScore()` and `calculateAccuracy()` are consistent
+   - Add comprehensive validation for incoming values
+   - Send complete score information with each game state update
+
+This approach will significantly reduce the complexity of your frontend code while ensuring consistent scoring across all clients. It aligns with best practices for real-time multiplayer games by maintaining the server as the authoritative source for all game state.
+
+Would you like me to provide specific code examples for these changes? 
+
+## Implementation Plan: Backend Calculation Migration (March 4, 2025)
+
+### Phase 1: Server-Side Consolidation
+1. **Audit Current Calculations** ⏳
+   - Review all calculation logic in frontend components
+   - Document formulas and conversion methods
+   - Identify dependencies and data flow
+
+2. **Backend Consolidation** ⏳
+   - Move all calculation logic to server.js
+   - Standardize calculation methods
+   - Implement validation for incoming values
+   - Add comprehensive logging
+
+3. **Frontend Cleanup** ⏳
+   - Remove duplicate calculations from components
+   - Update WebSocket service
+   - Modify components to use server values
+
+4. **Testing & Verification** ⏳
+   - Run test cases with new architecture
+   - Verify score consistency
+   - Check value conversion accuracy
+
+### Current Task: Calculation Audit
+
+#### Frontend Calculations to Remove
+1. Game Board Component:
+   - [ ] `getScoreForRound()`
+   - [ ] `calculateScore()`
+   - [ ] Local score accumulation logic
+
+2. WebSocket Service:
+   - [ ] Score calculation methods
+   - [ ] Value conversion logic
+
+3. Gauge Component:
+   - [ ] Score-related calculations
+   - [ ] Keep only UI-specific normalizations
+
+#### Backend Calculations to Consolidate
+1. Server.js:
+   - [ ] Standardize `calculateScore()` and `calculateAccuracy()`
+   - [ ] Add input validation
+   - [ ] Implement comprehensive value conversion
+   - [ ] Add detailed logging
+
+#### Data Flow Updates
+1. Frontend → Backend:
+   - Raw gauge position (0-100%)
+   - Question context (min, max, correct answer)
+   - Player ID and round number
+
+2. Backend → Frontend:
+   - Calculated score
+   - Normalized values
+   - Complete game state
+   - Round results
+
+### Next Steps
+1. Begin calculation audit
+2. Document all calculation methods
+3. Plan backend consolidation
+4. Create test cases for verification 

@@ -69,7 +69,7 @@ export class WebSocketService {
     ]
   };
 
-  playerId: string | null = null;
+  private _playerId: string | null = null;
 
   constructor() {
     // Version check message
@@ -105,8 +105,7 @@ export class WebSocketService {
       reconnectionDelay: 1000,
       autoConnect: false,
       transports: ['websocket'],
-      path: '/backend/socket.io',
-      withCredentials: true,
+      path: '/socket.io',
       secure: true,
       forceNew: true,
       rememberUpgrade: true
@@ -123,6 +122,10 @@ export class WebSocketService {
     this.setupSocketListeners();
   }
 
+  get playerId(): string | null {
+    return this._playerId;
+  }
+
   private setupSocketListeners(): void {
     this.socket.on('connect', () => {
       console.log('%c WebSocket Connected', 'background: #222; color: #00ff00', {
@@ -132,7 +135,7 @@ export class WebSocketService {
         timestamp: new Date().toISOString(),
         buildVersion: BUILD_VERSION
       });
-      this.playerId = this.socket.id || null;
+      this._playerId = this.socket.id || null;
       this.isConnecting = false;
 
       if (this.pendingJoinData) {
@@ -204,14 +207,14 @@ export class WebSocketService {
 
     this.socket.on('disconnect', () => {
       console.log('WebSocketService: Disconnected from server');
-      this.playerId = null;
+      this._playerId = null;
       this.gameState.next(null);
       this.isConnecting = false;
     });
 
     this.socket.on('joinGameSuccess', (data: { playerId: string }) => {
       console.log('WebSocketService: Successfully joined game', data);
-      this.playerId = data.playerId;
+      this._playerId = data.playerId;
     });
   }
 
@@ -299,38 +302,38 @@ export class WebSocketService {
 
   submitGuess(position: number): void {
     if (!this.socket.connected) {
-      console.error('WebSocket: Cannot submit guess - socket not connected', {
-        socketId: this.socket.id,
-        connected: this.socket.connected,
-        timestamp: new Date().toISOString()
-      });
-      return;
+        console.error('WebSocket: Cannot submit guess - socket not connected');
+        return;
     }
 
-    if (!this.playerId) {
-      console.error('WebSocket: Cannot submit guess - no player ID', {
-        socketId: this.socket.id,
-        playerId: this.playerId,
-        timestamp: new Date().toISOString()
-      });
-      return;
+    if (!this._playerId) {
+        console.error('WebSocket: Cannot submit guess - no player ID');
+        return;
     }
 
     console.log('WebSocket: Submitting guess', {
-      playerId: this.playerId,
-      position: Math.round(position)
+        playerId: this._playerId,
+        position: Math.round(position),
+        currentRound: this.gameState.value?.currentRound
     });
 
+    // Send guess to server and rely on gameStateUpdate for score updates
     this.socket.emit('submit-guess', { 
-      playerId: this.playerId,
-      position: Math.round(position)
-    }, (response: { success: boolean }) => {
-      console.log('WebSocket: Server acknowledged guess submission', {
-        response,
-        playerId: this.playerId,
-        position: Math.round(position)
-      });
+        playerId: this._playerId,
+        position: Math.round(position),
+        currentRound: this.gameState.value?.currentRound
     });
+  }
+
+  // Remove any local score calculations and rely on server updates
+  private handleGameStateUpdate(gameState: GameState): void {
+    console.log('WebSocket: Received game state update', {
+        phase: gameState.gamePhase,
+        round: gameState.currentRound,
+        players: gameState.players.length
+    });
+
+    this.gameState.next(gameState);
   }
 
   startGame(): void {
