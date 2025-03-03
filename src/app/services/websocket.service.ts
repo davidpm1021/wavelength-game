@@ -5,15 +5,16 @@ import { GameState, Player } from '../models/game.model';
 import { environment } from '../../environments/environment';
 import { isDevMode } from '@angular/core';
 
+const PRODUCTION_URL = 'https://wavelength-game.onrender.com';
+const DEVELOPMENT_URL = 'http://localhost:3000';
+
 @Injectable({
   providedIn: 'root'
 })
 export class WebSocketService {
   private socket: Socket;
   private gameState = new BehaviorSubject<GameState | null>(null);
-  private readonly SERVER_URL = isDevMode() 
-    ? 'http://localhost:3000'
-    : 'https://wavelength-game.onrender.com';
+  private readonly SERVER_URL = PRODUCTION_URL;
   private readonly WS_URL = isDevMode()
     ? 'ws://localhost:3000'
     : 'wss://wavelength-game.onrender.com';
@@ -71,7 +72,7 @@ export class WebSocketService {
   playerId: string | null = null;
 
   constructor() {
-    console.log('WebSocketService: Initializing with URL:', this.WS_URL, 'Development mode:', isDevMode());
+    console.log('WebSocketService: Initializing with URL:', this.SERVER_URL);
     
     // Configure Socket.IO with secure options
     this.socket = io(this.SERVER_URL, {
@@ -81,7 +82,7 @@ export class WebSocketService {
       autoConnect: false,
       transports: ['websocket', 'polling'],
       withCredentials: true,
-      secure: !isDevMode()
+      secure: true
     });
 
     this.setupSocketListeners();
@@ -105,8 +106,7 @@ export class WebSocketService {
         error: error?.message || error,
         url: this.SERVER_URL,
         socketId: this.socket?.id,
-        transport: this.socket?.io?.engine?.transport?.name,
-        isDev: isDevMode()
+        transport: this.socket?.io?.engine?.transport?.name
       });
       this.isConnecting = false;
       this.gameState.next(null);
