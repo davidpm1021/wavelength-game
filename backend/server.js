@@ -487,18 +487,18 @@ io.on('connection', (socket) => {
 
         console.log('Starting game with config:', data);
 
-        gameState.isGameStarted = true;
-        gameState.currentRound = 0;
-        gameState.questions = data?.gameConfig?.questions || [];
-        gameState.totalRounds = data?.gameConfig?.rounds || TOTAL_ROUNDS;
-        gameState.players.forEach(p => p.score = 0);
-        
-        if (!gameState.questions || gameState.questions.length === 0) {
+        if (!data || !data.gameConfig || !data.gameConfig.questions || data.gameConfig.questions.length === 0) {
             console.error('No questions provided in game config');
             socket.emit('error', { message: 'No questions available' });
             return;
         }
 
+        gameState.isGameStarted = true;
+        gameState.currentRound = 0;
+        gameState.questions = data.gameConfig.questions;
+        gameState.totalRounds = data.gameConfig.rounds || TOTAL_ROUNDS;
+        gameState.players.forEach(p => p.score = 0);
+        
         console.log('Game starting with questions:', gameState.questions);
         startRound();
     });
