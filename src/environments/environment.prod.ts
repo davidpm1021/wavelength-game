@@ -1,4 +1,4 @@
 export const environment = {
   production: true,
-  backendUrl: 'https://wavelength-game-backend.onrender.com' // Free tier Render.com URL
+  backendUrl: 'https://wavelength-game.onrender.com:10000' // Updated with correct port
 }; 
