@@ -3,7 +3,8 @@ import { io, Socket } from 'socket.io-client';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { GameState, Player } from '../models/game.model';
 
-const PRODUCTION_URL = 'https://wavelength-game.onrender.com';
+const PRODUCTION_URL = 'https://wavelength-game-backend.onrender.com';
+const WS_PRODUCTION_URL = 'wss://wavelength-game-backend.onrender.com';
 
 @Injectable({
   providedIn: 'root'
@@ -12,7 +13,7 @@ export class WebSocketService {
   private socket: Socket;
   private gameState = new BehaviorSubject<GameState | null>(null);
   private readonly SERVER_URL = PRODUCTION_URL;
-  private readonly WS_URL = 'wss://wavelength-game.onrender.com';
+  private readonly WS_URL = WS_PRODUCTION_URL;
   private isConnecting = false;
   private pendingJoinData: { playerName: string, gameConfig: any } | null = null;
   private dummyOpponentId: string | null = null;
@@ -67,17 +68,23 @@ export class WebSocketService {
   playerId: string | null = null;
 
   constructor() {
-    console.log('WebSocketService: Initializing with URL:', this.SERVER_URL);
+    console.log('WebSocketService: Initializing with URLs:', {
+      http: this.SERVER_URL,
+      ws: this.WS_URL
+    });
     
-    // Configure Socket.IO with secure options
+    // Configure Socket.IO with secure options and explicit websocket URL
     this.socket = io(this.SERVER_URL, {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       autoConnect: false,
-      transports: ['websocket', 'polling'],
+      transports: ['websocket'],
+      path: '/socket.io',
       withCredentials: true,
-      secure: true
+      secure: true,
+      forceNew: true,
+      rememberUpgrade: true
     });
 
     this.setupSocketListeners();
