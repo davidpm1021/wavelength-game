@@ -11,18 +11,25 @@ import { GamePhase } from '../../models/game.model';
 export class GameBoardComponent implements OnInit {
     gameState: GameState | null = null;
     sliderPosition = 50;
-    showStartPrompt = true;
+    showStartPrompt = false;
+    isHost = false;
 
     constructor(private webSocketService: WebSocketService) {}
 
     ngOnInit(): void {
         this.webSocketService.getGameState().subscribe(state => {
             this.gameState = state;
+            // Update host status
+            const currentPlayer = state?.players?.find(p => p.id === this.webSocketService.playerId);
+            this.isHost = currentPlayer?.isHost || false;
+            
+            // Show start prompt only for host in waiting state
             if (state?.gamePhase === GamePhase.WAITING_FOR_PLAYERS && 
                 this.isHost && 
-                !state.isGameStarted &&
-                !this.gameState?.currentRound) {
+                !state.isGameStarted) {
                 this.showStartPrompt = true;
+            } else {
+                this.showStartPrompt = false;
             }
         });
     }
