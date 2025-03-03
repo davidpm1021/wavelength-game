@@ -2,8 +2,6 @@ import { Injectable } from '@angular/core';
 import { io, Socket } from 'socket.io-client';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { GameState, Player } from '../models/game.model';
-import { environment } from '../../environments/environment';
-import { isDevMode } from '@angular/core';
 
 const PRODUCTION_URL = 'https://wavelength-game.onrender.com';
 const DEVELOPMENT_URL = 'http://localhost:3000';
@@ -15,9 +13,7 @@ export class WebSocketService {
   private socket: Socket;
   private gameState = new BehaviorSubject<GameState | null>(null);
   private readonly SERVER_URL = PRODUCTION_URL;
-  private readonly WS_URL = isDevMode()
-    ? 'ws://localhost:3000'
-    : 'wss://wavelength-game.onrender.com';
+  private readonly WS_URL = 'wss://wavelength-game.onrender.com';
   private isConnecting = false;
   private pendingJoinData: { playerName: string, gameConfig: any } | null = null;
   private dummyOpponentId: string | null = null;
