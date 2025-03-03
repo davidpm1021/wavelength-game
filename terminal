@@ -4,4 +4,4 @@ npm install @angular/material @angular/cdk socket.io-client tailwindcss
 npx tailwindcss init
 ng generate component components/game-board
 ng generate component components/player-join
-ng generate component components/leaderboard 
+ng generate component components/leaderboard

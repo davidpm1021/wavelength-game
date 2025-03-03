@@ -10,13 +10,14 @@ app.use(cors());
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
-        origin: "http://localhost:4200",
+        origin: process.env.FRONTEND_URL || "http://localhost:4200",
         methods: ["GET", "POST"]
     }
 });
 
 const TOTAL_ROUNDS = 10;
 const ROUND_TIME = 30; // seconds
+const MAX_PLAYERS = 20;
 
 const gameState = {
     players: [],
@@ -35,6 +36,23 @@ let roundTimer = null;
 function calculateScore(guess, correctPosition) {
     const distance = Math.abs(guess - correctPosition);
     return Math.max(0, Math.floor(100 - (distance * 2))); // More punishing for far guesses
+}
+
+function calculateAccuracy(guess, correctPosition, minValue = 0, maxValue = 100) {
+    const distance = Math.abs(guess - correctPosition);
+    const range = maxValue - minValue;
+    return Math.max(0, 100 - (distance / range * 100));
+}
+
+function updatePlayerAccuracy(player, accuracy) {
+    if (!player.bestAccuracy || accuracy > player.bestAccuracy) {
+        player.bestAccuracy = accuracy;
+    }
+    if (!player.guessHistory) {
+        player.guessHistory = [];
+    }
+    player.guessHistory.push(accuracy);
+    player.averageAccuracy = player.guessHistory.reduce((a, b) => a + b, 0) / player.guessHistory.length;
 }
 
 function startRound() {
@@ -95,16 +113,23 @@ function endRound() {
     io.emit('gameStateUpdate', gameState);
 }
 
-function resetGameState(clearPlayers = false) {
-    if (clearPlayers) {
+function resetGameState(resetPlayers = true) {
+    if (resetPlayers) {
         gameState.players = [];
     } else {
-        gameState.players.forEach(p => p.score = 0);
+        // Reset player state but keep accuracy statistics
+        gameState.players.forEach(player => {
+            player.hasSubmitted = false;
+            player._lastGuess = null;
+            player.score = 0;
+            // Don't reset bestAccuracy, averageAccuracy, or guessHistory
+        });
     }
     gameState.currentRound = 0;
     gameState.isGameStarted = false;
     gameState.currentQuestion = null;
     gameState.gamePhase = 'WAITING_FOR_PLAYERS';
+    gameState.roundTimeRemaining = ROUND_TIME;
     gameState.roundResults = null;
     gameState.questions = [];
     if (roundTimer) {
@@ -164,16 +189,27 @@ io.on('connection', (socket) => {
 
             console.log(`Player ${playerName} (${socket.id}) joining game`);
             
-            // Remove any existing player with this socket id
-            gameState.players = gameState.players.filter(p => p.id !== socket.id);
+            // Remove any existing player with this socket id and any stale dummy players
+            gameState.players = gameState.players.filter(p => {
+                if (p.id === socket.id) return false;
+                if (p.id.startsWith('dummy-')) {
+                    const clientSocket = io.sockets.sockets.get(p.id);
+                    return clientSocket && clientSocket.connected;
+                }
+                return true;
+            });
             
             // Create new player
             const player = {
                 id: socket.id,
                 name: playerName,
-                isHost: gameState.players.length === 0 || gameState.players.every(p => p.id.startsWith('dummy-')),
-                hasSubmittedGuess: false,
-                score: 0
+                isHost: gameState.players.length === 0,
+                hasSubmitted: false,
+                score: 0,
+                bestAccuracy: 0,
+                averageAccuracy: 0,
+                guessHistory: [],
+                _lastGuess: null
             };
 
             // If this player becomes host, remove host status from others
@@ -182,6 +218,13 @@ io.on('connection', (socket) => {
             }
 
             gameState.players.push(player);
+
+            console.log('Current players after join:', gameState.players.map(p => ({
+                id: p.id,
+                name: p.name,
+                isHost: p.isHost,
+                isDummy: p.isDummy
+            })));
 
             // Emit updated game state to all clients
             io.emit('gameStateUpdate', gameState);
@@ -195,20 +238,49 @@ io.on('connection', (socket) => {
     });
 
     // Handle dummy player addition for development
-    socket.on('addDummyPlayer', (dummyPlayer) => {
+    socket.on('addDummyPlayer', (dummyPlayer, callback) => {
         console.log('Adding dummy player:', dummyPlayer);
         
-        // Ensure dummy players are never hosts
+        // Check if we've reached the maximum number of players
+        if (gameState.players.length >= MAX_PLAYERS) {
+            console.log('Maximum number of players reached');
+            if (callback) callback({ success: false, reason: 'Maximum players reached' });
+            return;
+        }
+
+        // Check if a player with this ID already exists
+        if (gameState.players.some(p => p.id === dummyPlayer.id)) {
+            console.log('Player with this ID already exists:', dummyPlayer.id);
+            if (callback) callback({ success: false, reason: 'Player ID already exists' });
+            return;
+        }
+        
+        // Create new dummy player with all necessary fields
         const newPlayer = {
             id: dummyPlayer.id,
             name: dummyPlayer.name,
             isHost: false,  // Force dummy players to never be hosts
-            hasSubmittedGuess: false,
-            score: 0
+            hasSubmitted: false,
+            score: 0,
+            bestAccuracy: 0,
+            averageAccuracy: 0,
+            guessHistory: [],
+            _lastGuess: null,
+            isDummy: true
         };
         
         gameState.players.push(newPlayer);
+        console.log(`Added dummy player ${dummyPlayer.name} (${dummyPlayer.id}). Total players: ${gameState.players.length}`);
+        
+        // Log current player list for debugging
+        console.log('Current players:', gameState.players.map(p => ({
+            id: p.id,
+            name: p.name,
+            isDummy: p.isDummy
+        })));
+
         io.emit('gameStateUpdate', gameState);
+        if (callback) callback({ success: true });
     });
 
     // Handle player name setting
@@ -250,21 +322,9 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // Use the provided playerId if available, otherwise use socket.id
+        // Allow dummy players to submit through any socket
         const targetPlayerId = playerId || socket.id;
         const player = gameState.players.find(p => p.id === targetPlayerId);
-
-        console.log('Server: Processing guess submission:', {
-            targetPlayerId,
-            playerFound: !!player,
-            position,
-            isDummy,
-            currentPlayers: gameState.players.map(p => ({
-                id: p.id,
-                name: p.name,
-                hasSubmitted: p.hasSubmitted
-            }))
-        });
 
         if (!player) {
             console.error('Server: Player not found for submission:', {
@@ -285,14 +345,25 @@ io.on('connection', (socket) => {
             return;
         }
 
+        // Process the guess
         player.hasSubmitted = true;
         player._lastGuess = position;
-        
+
+        // Calculate and update accuracy statistics
+        const accuracy = calculateAccuracy(
+            position,
+            gameState.currentQuestion.correctPosition,
+            gameState.currentQuestion.minValue,
+            gameState.currentQuestion.maxValue
+        );
+        updatePlayerAccuracy(player, accuracy);
+
         console.log('Server: Updated player submission status:', {
             playerId: targetPlayerId,
             playerName: player.name,
             hasSubmitted: player.hasSubmitted,
             lastGuess: player._lastGuess,
+            accuracy,
             timestamp: new Date().toISOString()
         });
 
@@ -300,16 +371,6 @@ io.on('connection', (socket) => {
 
         // Check if all players have submitted
         const allSubmitted = gameState.players.every(p => p.hasSubmitted);
-        console.log('Server: Checking all submissions:', {
-            allSubmitted,
-            players: gameState.players.map(p => ({
-                id: p.id,
-                name: p.name,
-                hasSubmitted: p.hasSubmitted
-            })),
-            timestamp: new Date().toISOString()
-        });
-
         if (allSubmitted) {
             console.log('Server: All players have submitted, ending round');
             clearInterval(roundTimer);
@@ -347,22 +408,33 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
         const wasHost = gameState.players.find(p => p.id === socket.id)?.isHost;
-        gameState.players = gameState.players.filter(p => p.id !== socket.id);
+        
+        // Remove the disconnected player and any stale dummy players
+        gameState.players = gameState.players.filter(p => {
+            if (p.id === socket.id) return false; // Remove disconnected player
+            if (p.id.startsWith('dummy-')) {
+                // For dummy players, check if they're still needed
+                const totalPlayers = gameState.players.length;
+                const realPlayers = gameState.players.filter(p => !p.id.startsWith('dummy-')).length;
+                return totalPlayers <= MAX_PLAYERS && realPlayers < MAX_PLAYERS;
+            }
+            return true; // Keep other players
+        });
         
         // If host disconnected, assign new host if there are players
         if (wasHost && gameState.players.length > 0) {
-            gameState.players[0].isHost = true;
+            const firstRealPlayer = gameState.players.find(p => !p.id.startsWith('dummy-'));
+            if (firstRealPlayer) {
+                firstRealPlayer.isHost = true;
+            } else {
+                gameState.players[0].isHost = true;
+            }
         }
 
         // If no players left, reset game
         if (gameState.players.length === 0) {
             clearInterval(roundTimer);
-            gameState.isGameStarted = false;
-            gameState.currentRound = 0;
-            gameState.gamePhase = 'WAITING_FOR_PLAYERS';
-            gameState.questions = [];
-            gameState.currentQuestion = null;
-            gameState.roundResults = null;
+            resetGameState(true);
         }
 
         io.emit('gameStateUpdate', gameState);
