@@ -66,30 +66,43 @@ export class WebSocketService {
   playerId: string | null = null;
 
   constructor() {
-    console.log('WebSocketService: Initializing');
+    console.log('WebSocketService: Initializing with URL:', this.SERVER_URL);
+    
+    // Configure Socket.IO with secure options
     this.socket = io(this.SERVER_URL, {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
-      autoConnect: false // Don't connect automatically
+      autoConnect: false,
+      transports: ['websocket', 'polling'],
+      withCredentials: true,
+      secure: true,
+      rejectUnauthorized: false // Required for self-signed certs
     });
+
     this.setupSocketListeners();
   }
 
   private setupSocketListeners(): void {
     this.socket.on('connect', () => {
-      console.log('WebSocketService: Connected to server');
+      console.log('WebSocketService: Connected to server:', this.SERVER_URL);
       this.playerId = this.socket.id || null;
       this.isConnecting = false;
 
       if (this.pendingJoinData) {
+        console.log('WebSocketService: Sending pending join data');
         this.socket.emit('joinGame', this.pendingJoinData);
         this.pendingJoinData = null;
       }
     });
 
     this.socket.on('connect_error', (error) => {
-      console.error('WebSocketService: Connection error', error);
+      console.error('WebSocketService: Connection error', {
+        error: error?.message || error,
+        url: this.SERVER_URL,
+        socketId: this.socket?.id,
+        transport: this.socket?.io?.engine?.transport?.name
+      });
       this.isConnecting = false;
       this.gameState.next(null);
     });

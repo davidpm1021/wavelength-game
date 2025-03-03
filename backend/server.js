@@ -17,7 +17,9 @@ const io = new Server(httpServer, {
         methods: ["GET", "POST", "OPTIONS"],
         credentials: true
     },
-    transports: ['websocket', 'polling']
+    transports: ['websocket', 'polling'],
+    pingTimeout: 60000,
+    pingInterval: 25000
 });
 
 // Add a basic route for testing
@@ -27,7 +29,13 @@ app.get('/', (req, res) => {
 
 const TOTAL_ROUNDS = 10;
 const ROUND_TIME = 30; // seconds
-const MAX_PLAYERS = 20;
+const MAX_PLAYERS = 30; // Increased from 20 to 30
+
+// Log all incoming requests
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    next();
+});
 
 const gameState = {
     players: [],
@@ -152,19 +160,36 @@ function resetGameState(resetPlayers = true) {
 resetGameState(true);
 
 io.on('connection', (socket) => {
-    console.log('User connected:', socket.id, 'from origin:', socket.handshake.headers.origin);
-
-    socket.on('error', (error) => {
-        console.error('Socket error:', error);
+    console.log('User connected:', {
+        socketId: socket.id,
+        origin: socket.handshake.headers.origin,
+        timestamp: new Date().toISOString(),
+        headers: socket.handshake.headers,
+        query: socket.handshake.query,
+        totalPlayers: gameState.players.length
     });
 
-    // Add error logging for the socket instance
+    socket.on('error', (error) => {
+        console.error('Socket error:', {
+            socketId: socket.id,
+            error: error?.message || error,
+            timestamp: new Date().toISOString()
+        });
+    });
+
     socket.on('connect_error', (error) => {
-        console.error('Connection error:', error);
+        console.error('Connection error:', {
+            socketId: socket.id,
+            error: error?.message || error,
+            timestamp: new Date().toISOString()
+        });
     });
 
     socket.on('connect_timeout', () => {
-        console.error('Connection timeout');
+        console.error('Connection timeout:', {
+            socketId: socket.id,
+            timestamp: new Date().toISOString()
+        });
     });
 
     // Clean up any disconnected players on new connection
