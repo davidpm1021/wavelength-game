@@ -5,14 +5,24 @@ const cors = require('cors');
 const { getRandomQuestions } = require('./questions');
 
 const app = express();
-app.use(cors());
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS']
+}));
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
-        origin: ["https://davidpm1021.github.io", process.env.FRONTEND_URL || "http://localhost:4200"],
-        methods: ["GET", "POST"]
-    }
+        origin: "*",
+        methods: ["GET", "POST", "OPTIONS"],
+        credentials: true
+    },
+    transports: ['websocket', 'polling']
+});
+
+// Add a basic route for testing
+app.get('/', (req, res) => {
+    res.send('Wavelength Game Server is running');
 });
 
 const TOTAL_ROUNDS = 10;
@@ -142,7 +152,20 @@ function resetGameState(resetPlayers = true) {
 resetGameState(true);
 
 io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
+    console.log('User connected:', socket.id, 'from origin:', socket.handshake.headers.origin);
+
+    socket.on('error', (error) => {
+        console.error('Socket error:', error);
+    });
+
+    // Add error logging for the socket instance
+    socket.on('connect_error', (error) => {
+        console.error('Connection error:', error);
+    });
+
+    socket.on('connect_timeout', () => {
+        console.error('Connection timeout');
+    });
 
     // Clean up any disconnected players on new connection
     gameState.players = gameState.players.filter(p => {

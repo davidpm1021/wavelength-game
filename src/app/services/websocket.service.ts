@@ -10,7 +10,7 @@ import { environment } from '../../environments/environment';
 export class WebSocketService {
   private socket: Socket;
   private gameState = new BehaviorSubject<GameState | null>(null);
-  private readonly SERVER_URL = 'http://localhost:3000'; // Update this with your server URL
+  private readonly SERVER_URL = environment.backendUrl;
   private isDevelopment = !environment.production;
   private isConnecting = false;
   private pendingJoinData: { playerName: string, gameConfig: any } | null = null;
