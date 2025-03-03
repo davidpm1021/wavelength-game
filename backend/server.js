@@ -59,96 +59,55 @@ function logScoreCalculation(type, data) {
     });
 }
 
-// Validate and normalize input values
-function validateAndNormalizeInput(value, min, max, fieldName) {
-    if (value === undefined || value === null) {
-        throw new Error(`Invalid input: ${fieldName} is required`);
-    }
-    
-    // Ensure we have valid min/max values
-    min = Number(min || 0);
-    max = Number(max || 100);
-    value = Number(value);
-
-    // If value is outside the min-max range, normalize it
-    if (value < min) value = min;
-    if (value > max) value = max;
-
-    console.log(`[NORMALIZE_INPUT] ${fieldName}:`, {
+function normalizeInput(value, min = 0, max = 100) {
+    console.log('[NORMALIZE_INPUT]', {
         originalValue: value,
         min,
         max,
-        normalizedValue: value
+        normalizedValue: ((value - min) / (max - min)) * 100
     });
-
-    return value;
-}
-
-function calculateScore(guess, correctPosition, minValue = 0, maxValue = 100) {
-    try {
-        // Ensure numeric values
-        minValue = Number(minValue || 0);
-        maxValue = Number(maxValue || 100);
-        guess = Number(guess);
-        correctPosition = Number(correctPosition);
-
-        console.log('[SCORE_CALCULATION_START]', {
-            rawInputs: {
-                guess,
-                correctPosition,
-                minValue,
-                maxValue
-            },
-            timestamp: new Date().toISOString()
-        });
-
-        // Validate and normalize inputs
-        guess = validateAndNormalizeInput(guess, minValue, maxValue, 'guess');
-        correctPosition = validateAndNormalizeInput(correctPosition, minValue, maxValue, 'correctPosition');
-
-        if (maxValue <= minValue) {
-            throw new Error('Invalid range: maxValue must be greater than minValue');
-        }
-
-        const accuracy = calculateAccuracy(guess, correctPosition, minValue, maxValue);
-        
-        console.log('[SCORE_CALCULATION_RESULT]', {
-            normalizedInputs: { guess, correctPosition, minValue, maxValue },
-            output: accuracy,
-            calculation: 'score',
-            expectedScore: Math.round(100 - (Math.abs(guess - correctPosition) / (maxValue - minValue) * 100))
-        });
-        
-        return accuracy;
-    } catch (error) {
-        console.error('[SCORE_ERROR]', error);
-        return 0;
-    }
+    return ((value - min) / (max - min)) * 100;
 }
 
 function calculateAccuracy(guess, correctPosition, minValue = 0, maxValue = 100) {
-    try {
-        // Ensure all values are numbers and within range
-        guess = validateAndNormalizeInput(guess, minValue, maxValue, 'guess');
-        correctPosition = validateAndNormalizeInput(correctPosition, minValue, maxValue, 'correctPosition');
-        minValue = Number(minValue || 0);
-        maxValue = Number(maxValue || 100);
+    // Normalize both values to 0-100 scale for comparison
+    const normalizedGuess = normalizeInput(guess, minValue, maxValue);
+    const normalizedTarget = normalizeInput(correctPosition, minValue, maxValue);
+    
+    // Calculate absolute distance on the normalized scale
+    const distance = Math.abs(normalizedGuess - normalizedTarget);
+    const range = 100; // We're working with normalized values now
+    
+    // Calculate accuracy as percentage (100 - percentage distance)
+    const accuracy = Math.max(0, 100 - distance);
+    
+    console.log('[ACCURACY_CALCULATION]', {
+        inputs: { guess, correctPosition, minValue, maxValue },
+        normalized: { guess: normalizedGuess, target: normalizedTarget },
+        calculation: { distance, range },
+        output: accuracy
+    });
+    
+    return accuracy;
+}
 
-        const distance = Math.abs(guess - correctPosition);
-        const range = maxValue - minValue;
-        const accuracy = Math.max(0, Math.min(100, 100 - (distance / range * 100)));
-        
-        console.log('[ACCURACY_CALCULATION]', {
-            inputs: { guess, correctPosition, minValue, maxValue },
-            calculation: { distance, range },
-            output: Math.round(accuracy)
-        });
-        
-        return Math.round(accuracy);
-    } catch (error) {
-        console.error('[ACCURACY_ERROR]', error);
-        return 0;
-    }
+function calculateScore(guess, correctPosition, minValue = 0, maxValue = 100) {
+    console.log('[SCORE_CALCULATION_START]', {
+        rawInputs: { guess, correctPosition, minValue, maxValue },
+        timestamp: new Date().toISOString()
+    });
+
+    // Calculate accuracy and use it directly as the score
+    const score = calculateAccuracy(guess, correctPosition, minValue, maxValue);
+    
+    console.log('[SCORE_CALCULATION_RESULT]', {
+        normalizedInputs: { guess, correctPosition, minValue, maxValue },
+        output: score,
+        calculation: 'score',
+        expectedScore: score
+    });
+    
+    return Math.round(score);
 }
 
 function updatePlayerAccuracy(player, accuracy) {
@@ -562,7 +521,7 @@ io.on('connection', (socket) => {
         const currentQuestion = gameState.currentQuestion;
         const minValue = currentQuestion?.minValue || 0;
         const maxValue = currentQuestion?.maxValue || 100;
-        const normalizedPosition = validateAndNormalizeInput(position, minValue, maxValue, 'position');
+        const normalizedPosition = normalizeInput(position, minValue, maxValue);
 
         console.log('[GUESS_SUBMISSION]', {
             originalPosition: position,

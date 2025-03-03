@@ -1095,11 +1095,10 @@ export class GameBoardComponent implements OnInit, OnDestroy {
       roundScore: score,
       roundResults: this.gameState.roundResults,
       currentRound: this.gameState.currentRound,
-      timestamp: new Date().toISOString(),
-      rawScore: score
+      timestamp: new Date().toISOString()
     });
     
-    return Math.round(score);
+    return score;
   }
 
   getBestAccuracy(): number {
@@ -1167,17 +1166,16 @@ export class GameBoardComponent implements OnInit, OnDestroy {
     const max = currentQuestion.maxValue || 100;
     const range = max - min;
     
-    const targetValue = this.getTargetValue();
-    const distance = Math.abs(this.sliderValue - targetValue);
+    // Convert both values to the actual scale before calculating distance
+    const actualGuess = min + (this.sliderValue / 100) * range;
+    const targetValue = currentQuestion.correctPosition;
+    const distance = Math.abs(actualGuess - targetValue);
     return Math.round((distance / range) * 100);
   }
 
   getAccuracyPercentage(): number {
     if (!this.gameState?.currentQuestion) return 0;
-    const distance = Math.abs(this.sliderValue - this.getTargetValue());
-    const range = (this.gameState.currentQuestion.maxValue || 100) - (this.gameState.currentQuestion.minValue || 0);
-    const accuracy = Math.max(0, 100 - (distance / range * 100));
-    return accuracy;
+    return Math.max(0, 100 - this.getDistancePercentage());
   }
 
   getAccuracyColor(): string {
@@ -1324,55 +1322,44 @@ export class GameBoardComponent implements OnInit, OnDestroy {
   }
 
   submitGuess(): void {
-    if (!this.canSubmitGuess) return;
+    if (!this.canSubmitGuess || !this.gameState?.currentQuestion) return;
+    
+    const question = this.gameState.currentQuestion;
+    const min = question.minValue || 0;
+    const max = question.maxValue || 100;
+    const range = max - min;
+    
+    // Convert slider value (0-100) to actual value in question's range
+    const actualValue = min + (this.sliderValue / 100) * range;
     
     console.log('[FRONTEND_SUBMIT_GUESS]', {
-      value: this.sliderValue,
-      denormalizedValue: this.getDenormalizedValue(),
-      currentQuestion: this.gameState?.currentQuestion,
+      sliderValue: this.sliderValue,
+      actualValue,
+      questionRange: { min, max },
+      currentQuestion: question,
       timestamp: new Date().toISOString()
     });
 
-    this.onGaugeValueChange(this.sliderValue);
-  }
-
-  private normalizeValue(value: number): number {
-    if (!this.gameState?.currentQuestion) {
-      console.warn('GameBoard: No question available for normalization, returning 50');
-      return 50;
-    }
-    
-    const minValue = this.gameState.currentQuestion.minValue ?? 0;
-    const maxValue = this.gameState.currentQuestion.maxValue ?? 100;
-    const range = maxValue - minValue;
-    
-    // Convert actual value to percentage (0-100)
-    const percentage = ((value - minValue) / range) * 100;
-    console.log('GameBoard: Normalizing value', {
-      value,
-      minValue,
-      maxValue,
-      percentage
-    });
-    return percentage;
+    this.onGaugeValueChange(actualValue);
   }
 
   private getDenormalizedValue(): number {
     if (!this.gameState?.currentQuestion) return 0;
     
-    const minValue = this.gameState.currentQuestion.minValue || 0;
-    const maxValue = this.gameState.currentQuestion.maxValue || 100;
-    const range = maxValue - minValue;
+    const question = this.gameState.currentQuestion;
+    const min = question.minValue || 0;
+    const max = question.maxValue || 100;
+    const range = max - min;
     
     // Convert from percentage (0-100) back to actual value range
-    const denormalized = minValue + (this.sliderValue / 100) * range;
+    const denormalized = min + (this.sliderValue / 100) * range;
     console.log('GameBoard: Denormalizing value', {
-      percentage: this.sliderValue,
-      minValue,
-      maxValue,
-      denormalized
+      sliderValue: this.sliderValue,
+      min,
+      max,
+      denormalized: Math.round(denormalized)
     });
-    return Math.round(Math.max(minValue, Math.min(maxValue, denormalized)));
+    return Math.round(Math.max(min, Math.min(max, denormalized)));
   }
 
   onSliderChange(value: string | number): void {
