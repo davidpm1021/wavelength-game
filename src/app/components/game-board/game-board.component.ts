@@ -900,6 +900,7 @@ export class GameBoardComponent implements OnInit, OnDestroy {
   showTutorial = false;
   debugLogs: string[] = [];
   targetValue: number = 0;
+  showStartPrompt = false;
 
   constructor(public webSocketService: WebSocketService) {
     this.gameStateSubscription = this.webSocketService.getGameState().subscribe(
@@ -928,7 +929,6 @@ export class GameBoardComponent implements OnInit, OnDestroy {
         round: state?.currentRound,
         oldRound,
         oldPhase,
-        isHost: this.isHost,
         allSubmitted: this.haveAllPlayersSubmitted()
       });
       
@@ -954,7 +954,6 @@ export class GameBoardComponent implements OnInit, OnDestroy {
           from: oldPhase,
           to: state?.gamePhase,
           round: state?.currentRound,
-          isHost: this.isHost,
           allSubmitted: this.haveAllPlayersSubmitted()
         });
 
@@ -965,7 +964,6 @@ export class GameBoardComponent implements OnInit, OnDestroy {
           this.addDebugLog('Checking end game condition', {
             currentRound,
             isLastRound: this.checkEndGameCondition(currentRound),
-            isHost: this.isHost
           });
           
           if (this.checkEndGameCondition(currentRound)) {
@@ -1026,6 +1024,15 @@ export class GameBoardComponent implements OnInit, OnDestroy {
           !state.isGameStarted &&
           !this.gameState?.currentRound) {
         this.showTutorial = true;
+      }
+
+      // Show start prompt only for host in waiting state
+      if (state?.gamePhase === GamePhase.WAITING_FOR_PLAYERS && 
+          this.isHost && 
+          !state.isGameStarted) {
+        this.showStartPrompt = true;
+      } else {
+        this.showStartPrompt = false;
       }
     });
   }
@@ -1218,6 +1225,7 @@ export class GameBoardComponent implements OnInit, OnDestroy {
   }
 
   startGame(): void {
+    this.showStartPrompt = false;
     this.webSocketService.startGame();
   }
 
