@@ -487,7 +487,8 @@ io.on('connection', (socket) => {
 
         console.log('Starting game with config:', data);
 
-        if (!data || !data.gameConfig || !data.gameConfig.questions || data.gameConfig.questions.length === 0) {
+        // Store the game configuration when received during join
+        if (!data?.gameConfig?.questions || data.gameConfig.questions.length === 0) {
             console.error('No questions provided in game config');
             socket.emit('error', { message: 'No questions available' });
             return;
