@@ -11,6 +11,7 @@ export class WebSocketService {
   private socket: Socket;
   private gameState = new BehaviorSubject<GameState | null>(null);
   private readonly SERVER_URL = environment.backendUrl;
+  private readonly WS_URL = environment.wsUrl || environment.backendUrl;
   private isDevelopment = !environment.production;
   private isConnecting = false;
   private pendingJoinData: { playerName: string, gameConfig: any } | null = null;
@@ -66,10 +67,10 @@ export class WebSocketService {
   playerId: string | null = null;
 
   constructor() {
-    console.log('WebSocketService: Initializing with URL:', this.SERVER_URL);
+    console.log('WebSocketService: Initializing with URL:', this.WS_URL, 'Production:', environment.production);
     
     // Configure Socket.IO with secure options
-    this.socket = io(this.SERVER_URL, {
+    this.socket = io(this.WS_URL, {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
