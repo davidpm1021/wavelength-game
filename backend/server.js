@@ -76,16 +76,25 @@ function calculateAccuracy(guess, correctPosition, minValue = 0, maxValue = 100)
     
     // Calculate absolute distance on the normalized scale
     const distance = Math.abs(normalizedGuess - normalizedTarget);
-    const range = 100; // We're working with normalized values now
     
     // Calculate accuracy as percentage (100 - percentage distance)
     const accuracy = Math.max(0, 100 - distance);
     
     console.log('[ACCURACY_CALCULATION]', {
-        inputs: { guess, correctPosition, minValue, maxValue },
-        normalized: { guess: normalizedGuess, target: normalizedTarget },
-        calculation: { distance, range },
-        output: accuracy
+        inputs: { 
+            guess,
+            correctPosition,
+            minValue,
+            maxValue
+        },
+        normalized: {
+            guess: normalizedGuess,
+            target: normalizedTarget
+        },
+        calculation: {
+            distance,
+            accuracy
+        }
     });
     
     return accuracy;
@@ -193,7 +202,7 @@ function endRound() {
                 console.log('[PROCESSING_PLAYER_GUESS]', {
                     playerId: p.id,
                     playerName: p.name,
-                    lastGuess: p._lastGuess,
+                    guess: p._lastGuess,
                     correctPosition: gameState.currentQuestion.correctPosition,
                     minValue: gameState.currentQuestion.minValue,
                     maxValue: gameState.currentQuestion.maxValue
@@ -535,24 +544,22 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // Normalize the position value to the question's range
+        // Store the original position value
         const currentQuestion = gameState.currentQuestion;
         const minValue = currentQuestion?.minValue || 0;
         const maxValue = currentQuestion?.maxValue || 100;
-        const normalizedPosition = normalizeInput(position, minValue, maxValue);
 
         console.log('[GUESS_SUBMISSION]', {
             originalPosition: position,
-            normalizedPosition,
             questionRange: { min: minValue, max: maxValue },
             correctPosition: currentQuestion?.correctPosition
         });
 
         player.hasSubmitted = true;
-        player._lastGuess = normalizedPosition;
+        player._lastGuess = position; // Store original value
 
         const accuracy = calculateAccuracy(
-            normalizedPosition,
+            position,
             currentQuestion.correctPosition,
             minValue,
             maxValue
