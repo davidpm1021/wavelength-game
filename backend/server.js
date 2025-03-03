@@ -45,7 +45,8 @@ const gameState = {
     gamePhase: 'WAITING_FOR_PLAYERS',
     roundTimeRemaining: ROUND_TIME,
     roundResults: null,
-    questions: []
+    questions: [],
+    gameConfig: null  // Add storage for game configuration
 };
 
 let roundTimer = null;
@@ -362,12 +363,18 @@ io.on('connection', (socket) => {
     socket.on('joinGame', (data) => {
         try {
             console.log('Join game data received:', data);
-            const { playerName } = data;
+            const { playerName, gameConfig } = data;
             
             if (!playerName) {
                 console.error('No player name provided');
                 socket.emit('error', { message: 'Player name is required' });
                 return;
+            }
+
+            // Store the game configuration when received
+            if (gameConfig) {
+                console.log('Storing game configuration:', gameConfig);
+                gameState.gameConfig = gameConfig;
             }
 
             // Always allow joining, reset game if needed
@@ -485,19 +492,20 @@ io.on('connection', (socket) => {
         const player = gameState.players.find(p => p.id === socket.id);
         if (!player?.isHost) return;
 
-        console.log('Starting game with config:', data);
+        // Use stored config if available, otherwise use provided config
+        const config = data?.gameConfig || gameState.gameConfig;
+        console.log('Starting game with config:', config);
 
-        // Store the game configuration when received during join
-        if (!data?.gameConfig?.questions || data.gameConfig.questions.length === 0) {
-            console.error('No questions provided in game config');
+        if (!config?.questions || config.questions.length === 0) {
+            console.error('No questions available in game config');
             socket.emit('error', { message: 'No questions available' });
             return;
         }
 
         gameState.isGameStarted = true;
         gameState.currentRound = 0;
-        gameState.questions = data.gameConfig.questions;
-        gameState.totalRounds = data.gameConfig.rounds || TOTAL_ROUNDS;
+        gameState.questions = config.questions;
+        gameState.totalRounds = config.rounds || TOTAL_ROUNDS;
         gameState.players.forEach(p => p.score = 0);
         
         console.log('Game starting with questions:', gameState.questions);
