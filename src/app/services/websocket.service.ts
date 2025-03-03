@@ -4,7 +4,6 @@ import { BehaviorSubject, Observable } from 'rxjs';
 import { GameState, Player } from '../models/game.model';
 
 const PRODUCTION_URL = 'https://wavelength-game.onrender.com';
-const DEVELOPMENT_URL = 'http://localhost:3000';
 
 @Injectable({
   providedIn: 'root'

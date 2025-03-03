@@ -1,7 +1,7 @@
 export const environment = {
   production: false,
   isDevelopment: true,
-  apiUrl: 'http://localhost:3000',
-  wsUrl: 'ws://localhost:3000',
-  backendUrl: 'http://localhost:3000'
+  apiUrl: 'https://wavelength-game.onrender.com',
+  wsUrl: 'wss://wavelength-game.onrender.com',
+  backendUrl: 'https://wavelength-game.onrender.com'
 }; 
