@@ -64,19 +64,36 @@ function validateAndNormalizeInput(value, min, max, fieldName) {
     if (value === undefined || value === null) {
         throw new Error(`Invalid input: ${fieldName} is required`);
     }
-    return Math.max(min, Math.min(max, Number(value)));
+    
+    // Ensure we have valid min/max values
+    min = Number(min || 0);
+    max = Number(max || 100);
+    value = Number(value);
+
+    // If value is outside the min-max range, normalize it
+    if (value < min) value = min;
+    if (value > max) value = max;
+
+    console.log(`[NORMALIZE_INPUT] ${fieldName}:`, {
+        originalValue: value,
+        min,
+        max,
+        normalizedValue: value
+    });
+
+    return value;
 }
 
 function calculateScore(guess, correctPosition, minValue = 0, maxValue = 100) {
     try {
-        // Validate and normalize inputs
-        guess = validateAndNormalizeInput(guess, minValue, maxValue, 'guess');
-        correctPosition = validateAndNormalizeInput(correctPosition, minValue, maxValue, 'correctPosition');
-        minValue = Number(minValue);
-        maxValue = Number(maxValue);
+        // Ensure numeric values
+        minValue = Number(minValue || 0);
+        maxValue = Number(maxValue || 100);
+        guess = Number(guess);
+        correctPosition = Number(correctPosition);
 
         console.log('[SCORE_CALCULATION_START]', {
-            inputs: {
+            rawInputs: {
                 guess,
                 correctPosition,
                 minValue,
@@ -85,6 +102,10 @@ function calculateScore(guess, correctPosition, minValue = 0, maxValue = 100) {
             timestamp: new Date().toISOString()
         });
 
+        // Validate and normalize inputs
+        guess = validateAndNormalizeInput(guess, minValue, maxValue, 'guess');
+        correctPosition = validateAndNormalizeInput(correctPosition, minValue, maxValue, 'correctPosition');
+
         if (maxValue <= minValue) {
             throw new Error('Invalid range: maxValue must be greater than minValue');
         }
@@ -92,47 +113,41 @@ function calculateScore(guess, correctPosition, minValue = 0, maxValue = 100) {
         const accuracy = calculateAccuracy(guess, correctPosition, minValue, maxValue);
         
         console.log('[SCORE_CALCULATION_RESULT]', {
-            inputs: { guess, correctPosition, minValue, maxValue },
+            normalizedInputs: { guess, correctPosition, minValue, maxValue },
             output: accuracy,
             calculation: 'score',
             expectedScore: Math.round(100 - (Math.abs(guess - correctPosition) / (maxValue - minValue) * 100))
         });
         
-        // Log 50% range check
-        const range = maxValue - minValue;
-        const midPoint = minValue + (range / 2);
-        if (Math.abs(guess - midPoint) < range * 0.05) {
-            console.log('[MIDPOINT_GUESS_CHECK]', {
-                guess,
-                midPoint,
-                expectedScore: Math.round(100 - (Math.abs(guess - midPoint) / range * 100)),
-                actualScore: accuracy
-            });
-        }
-        
         return accuracy;
     } catch (error) {
         console.error('[SCORE_ERROR]', error);
-        return 0; // Return 0 score on error
+        return 0;
     }
 }
 
 function calculateAccuracy(guess, correctPosition, minValue = 0, maxValue = 100) {
     try {
+        // Ensure all values are numbers and within range
+        guess = validateAndNormalizeInput(guess, minValue, maxValue, 'guess');
+        correctPosition = validateAndNormalizeInput(correctPosition, minValue, maxValue, 'correctPosition');
+        minValue = Number(minValue || 0);
+        maxValue = Number(maxValue || 100);
+
         const distance = Math.abs(guess - correctPosition);
         const range = maxValue - minValue;
         const accuracy = Math.max(0, Math.min(100, 100 - (distance / range * 100)));
         
-        logScoreCalculation('ACCURACY', {
-            input: { guess, correctPosition, minValue, maxValue },
+        console.log('[ACCURACY_CALCULATION]', {
+            inputs: { guess, correctPosition, minValue, maxValue },
             calculation: { distance, range },
-            output: accuracy
+            output: Math.round(accuracy)
         });
         
-        return Math.round(accuracy); // Round to nearest integer
+        return Math.round(accuracy);
     } catch (error) {
         console.error('[ACCURACY_ERROR]', error);
-        return 0; // Return 0 accuracy on error
+        return 0;
     }
 }
 
@@ -531,61 +546,45 @@ io.on('connection', (socket) => {
         });
 
         if (gameState.gamePhase !== 'ROUND_IN_PROGRESS') {
-            console.log('Server: Rejecting submission - game not in progress:', {
-                currentPhase: gameState.gamePhase,
-                timestamp: new Date().toISOString()
-            });
+            console.log('Server: Rejecting submission - game not in progress');
             return;
         }
 
-        // Allow dummy players to submit through any socket
         const targetPlayerId = playerId || socket.id;
         const player = gameState.players.find(p => p.id === targetPlayerId);
 
-        if (!player) {
-            console.error('Server: Player not found for submission:', {
-                targetPlayerId,
-                position,
-                isDummy,
-                allPlayerIds: gameState.players.map(p => p.id)
-            });
+        if (!player || player.hasSubmitted) {
+            console.log('Server: Invalid player or already submitted');
             return;
         }
 
-        if (player.hasSubmitted) {
-            console.log('Server: Player has already submitted:', {
-                playerId: player.id,
-                playerName: player.name,
-                timestamp: new Date().toISOString()
-            });
-            return;
-        }
+        // Normalize the position value to the question's range
+        const currentQuestion = gameState.currentQuestion;
+        const minValue = currentQuestion?.minValue || 0;
+        const maxValue = currentQuestion?.maxValue || 100;
+        const normalizedPosition = validateAndNormalizeInput(position, minValue, maxValue, 'position');
 
-        // Add before processing the guess
-        console.log(`[GUESS] Received guess submission: playerId=${targetPlayerId}, position=${position}, currentRound=${gameState.currentRound}`);
-        console.log(`[GUESS] Current question: min=${gameState.currentQuestion.minValue}, max=${gameState.currentQuestion.maxValue}, correct=${gameState.currentQuestion.correctPosition}`);
-        
-        // Process the guess
+        console.log('[GUESS_SUBMISSION]', {
+            originalPosition: position,
+            normalizedPosition,
+            questionRange: { min: minValue, max: maxValue },
+            correctPosition: currentQuestion?.correctPosition
+        });
+
         player.hasSubmitted = true;
-        player._lastGuess = position;
+        player._lastGuess = normalizedPosition;
 
-        // Calculate and update accuracy statistics
         const accuracy = calculateAccuracy(
-            position,
-            gameState.currentQuestion.correctPosition,
-            gameState.currentQuestion.minValue,
-            gameState.currentQuestion.maxValue
+            normalizedPosition,
+            currentQuestion.correctPosition,
+            minValue,
+            maxValue
         );
-        updatePlayerAccuracy(player, accuracy);
-        
-        // Add after processing
-        console.log(`[GUESS] Player score updated: playerId=${targetPlayerId}, roundScore=${accuracy}, totalScore=${player.score}, roundScores=${JSON.stringify(player.roundScores || [])}`);
 
+        updatePlayerAccuracy(player, accuracy);
         io.emit('gameStateUpdate', gameState);
 
-        // Check if all players have submitted
-        const allSubmitted = gameState.players.every(p => p.hasSubmitted);
-        if (allSubmitted) {
+        if (gameState.players.every(p => p.hasSubmitted)) {
             console.log('Server: All players have submitted, ending round');
             clearInterval(roundTimer);
             endRound();
