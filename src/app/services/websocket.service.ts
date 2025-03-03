@@ -338,7 +338,7 @@ export class WebSocketService {
 
   startGame(): void {
     console.log('WebSocketService: Starting game');
-    this.socket.emit('startGame', null, (response: { success: boolean }) => {
+    this.socket.emit('startGame', { gameConfig: this.gameConfig }, (response: { success: boolean }) => {
       console.log('WebSocketService: Server acknowledged game start', response);
     });
   }
