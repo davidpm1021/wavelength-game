@@ -2,7 +2,10 @@ import { Injectable } from '@angular/core';
 import { io, Socket } from 'socket.io-client';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { GameState, Player } from '../models/game.model';
+import { environment } from '../../environments/environment';
 
+// Version info for debugging
+const BUILD_VERSION = '2024-03-03.1';
 const PRODUCTION_URL = 'https://wavelength-game-backend.onrender.com';
 const WS_PRODUCTION_URL = 'wss://wavelength-game-backend.onrender.com';
 
@@ -68,13 +71,23 @@ export class WebSocketService {
   playerId: string | null = null;
 
   constructor() {
-    console.log('WebSocketService: Initializing with URLs:', {
-      http: this.SERVER_URL,
-      ws: this.WS_URL
+    // Detailed initialization logging
+    console.log('%c WebSocket Service Initialization', 'background: #222; color: #bada55', {
+      buildVersion: BUILD_VERSION,
+      environment: environment.production ? 'production' : 'development',
+      serverUrl: this.SERVER_URL,
+      wsUrl: this.WS_URL,
+      environmentConfig: {
+        production: environment.production,
+        isDevelopment: environment.isDevelopment,
+        apiUrl: environment.apiUrl,
+        wsUrl: environment.wsUrl,
+        backendUrl: environment.backendUrl
+      }
     });
     
     // Configure Socket.IO with secure options and explicit websocket URL
-    this.socket = io(this.SERVER_URL, {
+    const socketConfig = {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
@@ -85,30 +98,50 @@ export class WebSocketService {
       secure: true,
       forceNew: true,
       rememberUpgrade: true
+    };
+
+    console.log('Creating Socket.IO instance with config:', {
+      url: this.SERVER_URL,
+      config: socketConfig
     });
+
+    this.socket = io(this.SERVER_URL, socketConfig);
 
     this.setupSocketListeners();
   }
 
   private setupSocketListeners(): void {
     this.socket.on('connect', () => {
-      console.log('WebSocketService: Connected to server:', this.SERVER_URL);
+      console.log('%c WebSocket Connected', 'background: #222; color: #00ff00', {
+        socketId: this.socket.id,
+        url: this.SERVER_URL,
+        transport: this.socket.io?.engine?.transport?.name,
+        timestamp: new Date().toISOString(),
+        buildVersion: BUILD_VERSION
+      });
       this.playerId = this.socket.id || null;
       this.isConnecting = false;
 
       if (this.pendingJoinData) {
-        console.log('WebSocketService: Sending pending join data');
+        console.log('Sending pending join data:', this.pendingJoinData);
         this.socket.emit('joinGame', this.pendingJoinData);
         this.pendingJoinData = null;
       }
     });
 
     this.socket.on('connect_error', (error) => {
-      console.error('WebSocketService: Connection error', {
+      console.error('%c WebSocket Connection Error', 'background: #222; color: #ff0000', {
         error: error?.message || error,
         url: this.SERVER_URL,
+        wsUrl: this.WS_URL,
         socketId: this.socket?.id,
-        transport: this.socket?.io?.engine?.transport?.name
+        transport: this.socket?.io?.engine?.transport?.name,
+        buildVersion: BUILD_VERSION,
+        engineInfo: {
+          transport: this.socket?.io?.engine?.transport?.name,
+          readyState: this.socket?.io?.engine?.readyState
+        },
+        stack: error?.stack
       });
       this.isConnecting = false;
       this.gameState.next(null);
