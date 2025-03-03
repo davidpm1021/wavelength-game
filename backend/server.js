@@ -10,7 +10,7 @@ app.use(cors());
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
-        origin: process.env.FRONTEND_URL || "http://localhost:4200",
+        origin: ["https://davidpm1021.github.io", process.env.FRONTEND_URL || "http://localhost:4200"],
         methods: ["GET", "POST"]
     }
 });
