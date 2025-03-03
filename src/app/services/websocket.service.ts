@@ -93,16 +93,17 @@ export class WebSocketService {
       reconnectionDelay: 1000,
       autoConnect: false,
       transports: ['websocket'],
-      path: '/socket.io',
+      path: '/backend/socket.io',
       withCredentials: true,
       secure: true,
       forceNew: true,
       rememberUpgrade: true
     };
 
-    console.log('Creating Socket.IO instance with config:', {
+    console.log('%c Creating Socket.IO instance', 'background: #222; color: #bada55', {
       url: this.SERVER_URL,
-      config: socketConfig
+      config: socketConfig,
+      buildVersion: BUILD_VERSION
     });
 
     this.socket = io(this.SERVER_URL, socketConfig);
