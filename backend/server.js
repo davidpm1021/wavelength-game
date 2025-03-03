@@ -2,7 +2,6 @@ const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
-const { getRandomQuestions } = require('./questions');
 
 const app = express();
 app.use(cors({
@@ -488,7 +487,8 @@ io.on('connection', (socket) => {
 
         gameState.isGameStarted = true;
         gameState.currentRound = 0;
-        gameState.questions = getRandomQuestions(TOTAL_ROUNDS);
+        // Use questions from client config instead of random questions
+        gameState.questions = data.gameConfig.questions;
         gameState.players.forEach(p => p.score = 0);
         
         startRound();
