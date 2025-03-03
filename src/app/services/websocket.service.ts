@@ -3,6 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { GameState, Player } from '../models/game.model';
 import { environment } from '../../environments/environment';
+import { isDevMode } from '@angular/core';
 
 @Injectable({
   providedIn: 'root'
@@ -10,9 +11,12 @@ import { environment } from '../../environments/environment';
 export class WebSocketService {
   private socket: Socket;
   private gameState = new BehaviorSubject<GameState | null>(null);
-  private readonly SERVER_URL = environment.backendUrl;
-  private readonly WS_URL = environment.wsUrl || environment.backendUrl;
-  private isDevelopment = !environment.production;
+  private readonly SERVER_URL = isDevMode() 
+    ? 'http://localhost:3000'
+    : 'https://wavelength-game.onrender.com';
+  private readonly WS_URL = isDevMode()
+    ? 'ws://localhost:3000'
+    : 'wss://wavelength-game.onrender.com';
   private isConnecting = false;
   private pendingJoinData: { playerName: string, gameConfig: any } | null = null;
   private dummyOpponentId: string | null = null;
@@ -67,18 +71,17 @@ export class WebSocketService {
   playerId: string | null = null;
 
   constructor() {
-    console.log('WebSocketService: Initializing with URL:', this.WS_URL, 'Production:', environment.production);
+    console.log('WebSocketService: Initializing with URL:', this.WS_URL, 'Development mode:', isDevMode());
     
     // Configure Socket.IO with secure options
-    this.socket = io(this.WS_URL, {
+    this.socket = io(this.SERVER_URL, {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       autoConnect: false,
       transports: ['websocket', 'polling'],
       withCredentials: true,
-      secure: true,
-      rejectUnauthorized: false // Required for self-signed certs
+      secure: !isDevMode()
     });
 
     this.setupSocketListeners();
@@ -102,7 +105,8 @@ export class WebSocketService {
         error: error?.message || error,
         url: this.SERVER_URL,
         socketId: this.socket?.id,
-        transport: this.socket?.io?.engine?.transport?.name
+        transport: this.socket?.io?.engine?.transport?.name,
+        isDev: isDevMode()
       });
       this.isConnecting = false;
       this.gameState.next(null);
