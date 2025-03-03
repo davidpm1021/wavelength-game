@@ -51,26 +51,128 @@ const gameState = {
 
 let roundTimer = null;
 
-function calculateScore(guess, correctPosition) {
-    const distance = Math.abs(guess - correctPosition);
-    return Math.max(0, Math.floor(100 - (distance * 2))); // More punishing for far guesses
+// Utility function for logging score calculations
+function logScoreCalculation(type, data) {
+    console.log(`[${type}]`, {
+        ...data,
+        timestamp: new Date().toISOString()
+    });
+}
+
+// Validate and normalize input values
+function validateAndNormalizeInput(value, min, max, fieldName) {
+    if (value === undefined || value === null) {
+        throw new Error(`Invalid input: ${fieldName} is required`);
+    }
+    return Math.max(min, Math.min(max, Number(value)));
+}
+
+function calculateScore(guess, correctPosition, minValue = 0, maxValue = 100) {
+    try {
+        // Validate and normalize inputs
+        guess = validateAndNormalizeInput(guess, minValue, maxValue, 'guess');
+        correctPosition = validateAndNormalizeInput(correctPosition, minValue, maxValue, 'correctPosition');
+        minValue = Number(minValue);
+        maxValue = Number(maxValue);
+
+        console.log('[SCORE_CALCULATION_START]', {
+            inputs: {
+                guess,
+                correctPosition,
+                minValue,
+                maxValue
+            },
+            timestamp: new Date().toISOString()
+        });
+
+        if (maxValue <= minValue) {
+            throw new Error('Invalid range: maxValue must be greater than minValue');
+        }
+
+        const accuracy = calculateAccuracy(guess, correctPosition, minValue, maxValue);
+        
+        console.log('[SCORE_CALCULATION_RESULT]', {
+            inputs: { guess, correctPosition, minValue, maxValue },
+            output: accuracy,
+            calculation: 'score',
+            expectedScore: Math.round(100 - (Math.abs(guess - correctPosition) / (maxValue - minValue) * 100))
+        });
+        
+        // Log 50% range check
+        const range = maxValue - minValue;
+        const midPoint = minValue + (range / 2);
+        if (Math.abs(guess - midPoint) < range * 0.05) {
+            console.log('[MIDPOINT_GUESS_CHECK]', {
+                guess,
+                midPoint,
+                expectedScore: Math.round(100 - (Math.abs(guess - midPoint) / range * 100)),
+                actualScore: accuracy
+            });
+        }
+        
+        return accuracy;
+    } catch (error) {
+        console.error('[SCORE_ERROR]', error);
+        return 0; // Return 0 score on error
+    }
 }
 
 function calculateAccuracy(guess, correctPosition, minValue = 0, maxValue = 100) {
-    const distance = Math.abs(guess - correctPosition);
-    const range = maxValue - minValue;
-    return Math.max(0, 100 - (distance / range * 100));
+    try {
+        const distance = Math.abs(guess - correctPosition);
+        const range = maxValue - minValue;
+        const accuracy = Math.max(0, Math.min(100, 100 - (distance / range * 100)));
+        
+        logScoreCalculation('ACCURACY', {
+            input: { guess, correctPosition, minValue, maxValue },
+            calculation: { distance, range },
+            output: accuracy
+        });
+        
+        return Math.round(accuracy); // Round to nearest integer
+    } catch (error) {
+        console.error('[ACCURACY_ERROR]', error);
+        return 0; // Return 0 accuracy on error
+    }
 }
 
 function updatePlayerAccuracy(player, accuracy) {
-    if (!player.bestAccuracy || accuracy > player.bestAccuracy) {
-        player.bestAccuracy = accuracy;
+    try {
+        if (!player) {
+            throw new Error('Invalid player object');
+        }
+
+        // Initialize arrays if they don't exist
+        if (!player.guessHistory) {
+            player.guessHistory = [];
+        }
+        if (!player.roundScores) {
+            player.roundScores = [];
+        }
+
+        // Update best accuracy if current is higher
+        if (!player.bestAccuracy || accuracy > player.bestAccuracy) {
+            player.bestAccuracy = accuracy;
+        }
+
+        // Add to guess history
+        player.guessHistory.push(accuracy);
+
+        // Calculate average accuracy
+        player.averageAccuracy = Math.round(
+            player.guessHistory.reduce((a, b) => a + b, 0) / player.guessHistory.length
+        );
+
+        logScoreCalculation('PLAYER_UPDATE', {
+            playerId: player.id,
+            accuracy,
+            bestAccuracy: player.bestAccuracy,
+            averageAccuracy: player.averageAccuracy,
+            guessCount: player.guessHistory.length
+        });
+    } catch (error) {
+        console.error('[PLAYER_UPDATE_ERROR]', error);
     }
-    if (!player.guessHistory) {
-        player.guessHistory = [];
-    }
-    player.guessHistory.push(accuracy);
-    player.averageAccuracy = player.guessHistory.reduce((a, b) => a + b, 0) / player.guessHistory.length;
 }
 
 function startRound() {
@@ -100,35 +202,101 @@ function startRound() {
 }
 
 function endRound() {
-    clearInterval(roundTimer);
-    gameState.gamePhase = 'SHOWING_RESULTS';
-    
-    // Calculate and store round results
-    const playerGuesses = gameState.players
-        .filter(p => p.hasSubmitted)
-        .map(p => ({
-            playerId: p.id,
-            playerName: p.name,
-            position: p._lastGuess,
-            score: calculateScore(p._lastGuess, gameState.currentQuestion.correctPosition)
-        }));
+    try {
+        clearInterval(roundTimer);
+        gameState.gamePhase = 'SHOWING_RESULTS';
+        
+        console.log('[ROUND_END_START]', {
+            round: gameState.currentRound,
+            question: gameState.currentQuestion,
+            timestamp: new Date().toISOString()
+        });
+        
+        // Calculate and store round results
+        const playerGuesses = gameState.players
+            .filter(p => p.hasSubmitted)
+            .map(p => {
+                console.log('[PROCESSING_PLAYER_GUESS]', {
+                    playerId: p.id,
+                    playerName: p.name,
+                    lastGuess: p._lastGuess,
+                    correctPosition: gameState.currentQuestion.correctPosition,
+                    minValue: gameState.currentQuestion.minValue,
+                    maxValue: gameState.currentQuestion.maxValue
+                });
 
-    gameState.roundResults = {
-        correctPosition: gameState.currentQuestion.correctPosition,
-        playerGuesses,
-        roundScores: {}
-    };
+                const score = calculateScore(
+                    p._lastGuess, 
+                    gameState.currentQuestion.correctPosition,
+                    gameState.currentQuestion.minValue,
+                    gameState.currentQuestion.maxValue
+                );
 
-    // Update player scores
-    playerGuesses.forEach(guess => {
-        const player = gameState.players.find(p => p.id === guess.playerId);
-        if (player) {
-            player.score += guess.score;
-            gameState.roundResults.roundScores[player.id] = guess.score;
-        }
-    });
+                console.log('[PLAYER_ROUND_SCORE]', {
+                    playerId: p.id,
+                    playerName: p.name,
+                    guess: p._lastGuess,
+                    score: score,
+                    currentTotalScore: p.score,
+                    newTotalScore: p.score + score
+                });
 
-    io.emit('gameStateUpdate', gameState);
+                return {
+                    playerId: p.id,
+                    playerName: p.name,
+                    position: p._lastGuess,
+                    score: score
+                };
+            });
+
+        gameState.roundResults = {
+            correctPosition: gameState.currentQuestion.correctPosition,
+            playerGuesses,
+            roundScores: {}
+        };
+
+        // Update player scores
+        playerGuesses.forEach(guess => {
+            const player = gameState.players.find(p => p.id === guess.playerId);
+            if (player) {
+                const oldScore = player.score;
+                player.score += guess.score;
+                gameState.roundResults.roundScores[player.id] = guess.score;
+                
+                // Ensure roundScores array exists and update it
+                if (!player.roundScores) {
+                    player.roundScores = [];
+                }
+                player.roundScores[gameState.currentRound - 1] = guess.score;
+
+                console.log('[PLAYER_SCORE_UPDATE]', {
+                    playerId: player.id,
+                    playerName: player.name,
+                    roundNumber: gameState.currentRound,
+                    oldScore: oldScore,
+                    roundScore: guess.score,
+                    newTotalScore: player.score,
+                    allRoundScores: player.roundScores
+                });
+            }
+        });
+
+        console.log('[ROUND_END_COMPLETE]', {
+            round: gameState.currentRound,
+            roundResults: gameState.roundResults,
+            playerScores: gameState.players.map(p => ({ 
+                name: p.name, 
+                score: p.score,
+                roundScores: p.roundScores 
+            }))
+        });
+
+        io.emit('gameStateUpdate', gameState);
+    } catch (error) {
+        console.error('[ROUND_END_ERROR]', error);
+        gameState.gamePhase = 'ERROR';
+        io.emit('gameStateUpdate', gameState);
+    }
 }
 
 function resetGameState(resetPlayers = true) {
@@ -393,6 +561,10 @@ io.on('connection', (socket) => {
             return;
         }
 
+        // Add before processing the guess
+        console.log(`[GUESS] Received guess submission: playerId=${targetPlayerId}, position=${position}, currentRound=${gameState.currentRound}`);
+        console.log(`[GUESS] Current question: min=${gameState.currentQuestion.minValue}, max=${gameState.currentQuestion.maxValue}, correct=${gameState.currentQuestion.correctPosition}`);
+        
         // Process the guess
         player.hasSubmitted = true;
         player._lastGuess = position;
@@ -405,15 +577,9 @@ io.on('connection', (socket) => {
             gameState.currentQuestion.maxValue
         );
         updatePlayerAccuracy(player, accuracy);
-
-        console.log('Server: Updated player submission status:', {
-            playerId: targetPlayerId,
-            playerName: player.name,
-            hasSubmitted: player.hasSubmitted,
-            lastGuess: player._lastGuess,
-            accuracy,
-            timestamp: new Date().toISOString()
-        });
+        
+        // Add after processing
+        console.log(`[GUESS] Player score updated: playerId=${targetPlayerId}, roundScore=${accuracy}, totalScore=${player.score}, roundScores=${JSON.stringify(player.roundScores || [])}`);
 
         io.emit('gameStateUpdate', gameState);
 

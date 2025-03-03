@@ -726,14 +726,14 @@ import { GaugeComponent } from '../gauge/gauge.component';
         <div class="round-info">
           <div class="round-stat">
             <div class="round-label">Round</div>
-            <div class="round-value">{{ getCurrentRound() }}/{{ getTotalRounds() }}</div>
+            <div class="round-value">{{ getCurrentRound() }}</div>
           </div>
         </div>
 
         <div class="game-status">
           <ng-container [ngSwitch]="gameState?.gamePhase">
             <div *ngSwitchCase="GamePhase.ROUND_IN_PROGRESS" class="current-question">
-              <h3>{{ getCurrentQuestionText() }}</h3>
+              <h3>{{ getCurrentQuestion() }}</h3>
               <div class="question-debug" *ngIf="!gameState?.currentQuestion?.text">
                 <small>Debug: {{ gameState?.currentQuestion | json }}</small>
               </div>
@@ -742,9 +742,9 @@ import { GaugeComponent } from '../gauge/gauge.component';
             <div *ngSwitchCase="GamePhase.WAITING_FOR_PLAYERS">
               Waiting for players...
             </div>
-            
+
             <div *ngSwitchCase="GamePhase.SHOWING_RESULTS" class="results-info">
-              <div class="score-value">{{ getScoreForRound() }}</div>
+              <div class="score-value">{{ getRoundScore() }}</div>
               <div class="score-detail">points earned this round</div>
               
               <div class="score-breakdown">
@@ -767,7 +767,7 @@ import { GaugeComponent } from '../gauge/gauge.component';
                 {{ getAccuracyMessage() }}
               </div>
             </div>
-            
+
             <div *ngSwitchCase="GamePhase.GAME_OVER" class="leaderboard">
               <div class="winner-trophy">🏆</div>
               <div class="leaderboard-title">Game Over!</div>
@@ -775,7 +775,7 @@ import { GaugeComponent } from '../gauge/gauge.component';
               <div class="game-summary">
                 <div class="summary-stat">
                   <div class="summary-label">Final Score</div>
-                  <div class="summary-value">{{ score }}</div>
+                  <div class="summary-value">{{ getCurrentScore() }}</div>
                 </div>
                 <div class="summary-stat">
                   <div class="summary-label">Best Accuracy</div>
@@ -810,23 +810,23 @@ import { GaugeComponent } from '../gauge/gauge.component';
             [leftLabel]="gameState?.currentQuestion?.leftConcept || ''"
             [rightLabel]="gameState?.currentQuestion?.rightConcept || ''"
             [displayValue]="getDisplayValue()"
-            (valueChange)="onSliderValueChange($event)">
+            (valueChange)="onGaugeValueChange($event)">
           </app-gauge>
 
           <div class="submit-container">
-            <button 
-              (click)="submitGuess()"
+              <button 
+                (click)="submitGuess()"
               [disabled]="!canSubmitGuess">
-              Submit Guess
-            </button>
+                Submit Guess
+              </button>
+            </div>
           </div>
-        </div>
 
         <div class="players-list">
           <div class="players-header">
             <h3>Players</h3>
             <div class="player-stats-header">
-              <span class="player-count">{{ gameState?.players?.length || 0 }}/20</span>
+              <span class="player-count">{{ gameState?.players?.length || 0 }}/30</span>
               <span class="submitted-count" *ngIf="gameState?.gamePhase === GamePhase.ROUND_IN_PROGRESS">
                 Submitted: {{ getSubmittedCount() }}/{{ gameState?.players?.length || 0 }}
               </span>
@@ -890,21 +890,32 @@ import { GaugeComponent } from '../gauge/gauge.component';
   `
 })
 export class GameBoardComponent implements OnInit, OnDestroy {
+  private gameStateSubscription: Subscription;
   gameState: GameState | null = null;
+  currentPlayer: Player | null = null;
   sliderValue: number = 50;
   currentQuestionId: string | null = null;
-  private subscription: Subscription | null = null;
   canSubmitGuess: boolean = true;
   GamePhase = GamePhase;
   showTutorial = false;
-  score: number = 0;
   debugLogs: string[] = [];
   targetValue: number = 0;
 
-  constructor(public webSocketService: WebSocketService) {}
+  constructor(public webSocketService: WebSocketService) {
+    this.gameStateSubscription = this.webSocketService.getGameState().subscribe(
+      (state: GameState | null) => {
+        this.gameState = state;
+        if (state) {
+          this.currentPlayer = state.players.find(
+            (p: Player) => p.id === this.webSocketService.playerId
+          ) || null;
+        }
+      }
+    );
+  }
 
   ngOnInit() {
-    this.subscription = this.webSocketService.getGameState().subscribe(state => {
+    this.webSocketService.getGameState().subscribe(state => {
       const oldQuestionId = this.currentQuestionId;
       const oldPhase = this.gameState?.gamePhase;
       const oldRound = this.gameState?.currentRound;
@@ -1020,177 +1031,97 @@ export class GameBoardComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    if (this.subscription) {
-      this.subscription.unsubscribe();
+    if (this.gameStateSubscription) {
+      this.gameStateSubscription.unsubscribe();
     }
   }
 
-  onSliderValueChange(percentage: number) {
-    if (!this.gameState?.currentQuestion) {
-      console.warn('GameBoard: No question available for slider update');
-      return;
+  onGaugeValueChange(value: number): void {
+    if (this.gameState?.gamePhase === GamePhase.ROUND_IN_PROGRESS && !this.currentPlayer?.hasSubmitted) {
+      this.webSocketService.submitGuess(value);
+      this.canSubmitGuess = false;
     }
-    
-    console.log('GameBoard: Slider value change:', {
-      oldValue: this.sliderValue,
-      newValue: percentage,
-      question: {
-        min: this.gameState.currentQuestion.minValue,
-        max: this.gameState.currentQuestion.maxValue,
-        correct: this.gameState.currentQuestion.correctPosition
-      }
-    });
-    
-    this.sliderValue = percentage;
-    
-    const actualValue = this.getDenormalizedValue();
-    console.log('GameBoard: Updated values:', {
-      percentage,
-      actualValue,
-      displayValue: this.getDisplayValue()
-    });
   }
 
-  submitGuess() {
-    if (!this.gameState?.currentQuestion || !this.canSubmitGuess) return;
-    
-    const actualValue = this.getDenormalizedValue();
-    this.webSocketService.submitGuess(actualValue);
-    this.canSubmitGuess = false;
+  getCurrentRound(): string {
+    if (!this.gameState) return '0/0';
+    const currentRound = this.gameState.currentRound || 0;
+    const totalRounds = this.gameState.totalRounds || 5;
+    return `${currentRound}/${totalRounds}`;
   }
 
-  getTargetValue(): number {
-    if (!this.gameState?.currentQuestion) return 0;
-    
-    const question = this.gameState.currentQuestion;
-    const correctPosition = question.correctPosition;
-    const min = question.minValue || 0;
-    const max = question.maxValue || 100;
-    
-    // Convert the correct position to a percentage
-    const percentage = ((correctPosition - min) / (max - min)) * 100;
-    console.log('GameBoard: Target value calculation', {
-      correctPosition,
-      min,
-      max,
-      percentage: Math.round(percentage)
+  getTimeRemaining(): string {
+    const timeRemaining = this.gameState?.roundTimeRemaining || 0;
+    const minutes = Math.floor(timeRemaining / 60);
+    const seconds = timeRemaining % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  getCurrentQuestion(): string {
+    return this.gameState?.currentQuestion?.text || 'Waiting for question...';
+  }
+
+  getCurrentScore(): number {
+    const score = this.currentPlayer?.score || 0;
+    console.log('[FRONTEND_CURRENT_SCORE_DISPLAY]', {
+      playerId: this.currentPlayer?.id,
+      playerName: this.currentPlayer?.name,
+      totalScore: score,
+      roundScores: this.currentPlayer?.roundScores,
+      timestamp: new Date().toISOString()
     });
-    return Math.round(Math.max(0, Math.min(100, percentage)));
+    return score;
   }
 
-  private normalizeValue(value: number): number {
-    if (!this.gameState?.currentQuestion) {
-      console.warn('GameBoard: No question available for normalization, returning 50');
-      return 50;
+  getRoundScore(): number {
+    if (!this.gameState?.roundResults?.roundScores || !this.currentPlayer?.id) {
+      return 0;
     }
+    const score = this.gameState.roundResults.roundScores[this.currentPlayer.id] || 0;
     
-    const minValue = this.gameState.currentQuestion.minValue ?? 0;
-    const maxValue = this.gameState.currentQuestion.maxValue ?? 100;
-    const range = maxValue - minValue;
-    
-    // Convert actual value to percentage (0-100)
-    const percentage = ((value - minValue) / range) * 100;
-    console.log('GameBoard: Normalizing value', {
-      value,
-      minValue,
-      maxValue,
-      percentage
-    });
-    return percentage;
-  }
-
-  private getDenormalizedValue(): number {
-    if (!this.gameState?.currentQuestion) return 0;
-    
-    const minValue = this.gameState.currentQuestion.minValue ?? 0;
-    const maxValue = this.gameState.currentQuestion.maxValue ?? 100;
-    const range = maxValue - minValue;
-    
-    // Convert from percentage (0-100) back to actual value range
-    const denormalized = minValue + (this.sliderValue / 100) * range;
-    console.log('GameBoard: Denormalizing value', {
-      percentage: this.sliderValue,
-      minValue,
-      maxValue,
-      denormalized
-    });
-    return Math.round(Math.max(minValue, Math.min(maxValue, denormalized)));
-  }
-
-  getDisplayValue(): string {
-    const value = Math.round(this.getDenormalizedValue());
-    return value.toString();
-  }
-
-  startGame(): void {
-    this.webSocketService.startGame();
-  }
-
-  nextRound(): void {
-    this.webSocketService.nextRound();
-  }
-
-  startNewGame(): void {
-    this.webSocketService.startNewGame();
-  }
-
-  get isHost(): boolean {
-    return this.gameState?.players.some(
-      p => p.id === this.webSocketService.playerId && p.isHost
-    ) ?? false;
-  }
-
-  get sortedPlayers(): Player[] {
-    return [...(this.gameState?.players || [])].sort((a, b) => b.score - a.score);
-  }
-
-  getCurrentQuestionText(): string {
-    if (!this.gameState?.currentQuestion) {
-      console.error('No current question in game state');
-      return 'Error: No question loaded';
-    }
-
-    const question = this.gameState.currentQuestion;
-    
-    if (!question.text) {
-      console.error('Question is missing text property:', question);
-      return 'Error: Invalid question data';
-    }
-
-    return question.text;
-  }
-
-  getScoreForRound(): number {
-    if (!this.gameState?.currentQuestion) return 0;
-    
-    const currentQuestion = this.gameState.currentQuestion;
-    const min = currentQuestion.minValue || 0;
-    const max = currentQuestion.maxValue || 100;
-    
-    // Get the actual values (not percentages)
-    const targetActual = currentQuestion.correctPosition;
-    const guessActual = this.getDenormalizedValue();
-    
-    // Calculate distance as a percentage of the total range
-    const range = max - min;
-    const distance = Math.abs(targetActual - guessActual);
-    const distancePercentage = (distance / range) * 100;
-    
-    // Score is inverse of distance percentage, max 100 points
-    const score = Math.round(Math.max(0, 100 - distancePercentage * 2));
-    
-    console.log('GameBoard: Score calculation', {
-      targetActual,
-      guessActual,
-      distance,
-      range,
-      distancePercentage,
-      score,
-      min,
-      max
+    console.log('[FRONTEND_ROUND_SCORE_DISPLAY]', {
+      playerId: this.currentPlayer.id,
+      playerName: this.currentPlayer.name,
+      roundScore: score,
+      roundResults: this.gameState.roundResults,
+      currentRound: this.gameState.currentRound,
+      timestamp: new Date().toISOString()
     });
     
     return score;
+  }
+
+  getBestAccuracy(): number {
+    return this.currentPlayer?.bestAccuracy || 0;
+  }
+
+  getAverageAccuracy(): number {
+    return this.currentPlayer?.averageAccuracy || 0;
+  }
+
+  hasSubmitted(): boolean {
+    return this.currentPlayer?.hasSubmitted || false;
+  }
+
+  isHost(): boolean {
+    return this.currentPlayer?.isHost || false;
+  }
+
+  get sortedPlayers(): Player[] {
+    const players = [...(this.gameState?.players || [])].sort((a, b) => 
+      (b.score || 0) - (a.score || 0)
+    );
+    
+    console.log('[FRONTEND_LEADERBOARD_UPDATE]', {
+      players: players.map(p => ({
+        name: p.name,
+        totalScore: p.score,
+        roundScores: p.roundScores
+      })),
+      timestamp: new Date().toISOString()
+    });
+    
+    return players;
   }
 
   get gameStatus(): string {
@@ -1202,7 +1133,7 @@ export class GameBoardComponent implements OnInit, OnDestroy {
       case GamePhase.WAITING_FOR_PLAYERS:
         return 'Waiting for players...';
       case GamePhase.ROUND_IN_PROGRESS:
-        return this.getCurrentQuestionText();
+        return this.getCurrentQuestion();
       case GamePhase.SHOWING_RESULTS:
         return 'Round Results';
       case GamePhase.GAME_OVER:
@@ -1229,7 +1160,6 @@ export class GameBoardComponent implements OnInit, OnDestroy {
     const distance = Math.abs(this.sliderValue - this.getTargetValue());
     const range = (this.gameState.currentQuestion.maxValue || 100) - (this.gameState.currentQuestion.minValue || 0);
     const accuracy = Math.max(0, 100 - (distance / range * 100));
-    this.updateAccuracyStats(accuracy);
     return accuracy;
   }
 
@@ -1248,36 +1178,46 @@ export class GameBoardComponent implements OnInit, OnDestroy {
     return 'Room for improvement!';
   }
 
-  getBestAccuracy(): number {
-    const currentPlayer = this.gameState?.players.find(p => p.id === this.webSocketService.playerId);
-    return currentPlayer?.bestAccuracy || 0;
+  getTargetValue(): number {
+    if (!this.gameState?.currentQuestion) return 0;
+    
+    const question = this.gameState.currentQuestion;
+    const correctPosition = question.correctPosition;
+    const min = question.minValue || 0;
+    const max = question.maxValue || 100;
+    
+    // Convert the correct position to a percentage
+    const percentage = ((correctPosition - min) / (max - min)) * 100;
+    console.log('GameBoard: Target value calculation', {
+      correctPosition,
+      min,
+      max,
+      percentage: Math.round(percentage)
+    });
+    return Math.round(Math.max(0, Math.min(100, percentage)));
   }
 
-  getAverageAccuracy(): number {
-    const currentPlayer = this.gameState?.players.find(p => p.id === this.webSocketService.playerId);
-    return currentPlayer?.averageAccuracy || 0;
+  getDisplayValue(): string {
+    const value = Math.round(this.getDenormalizedValue());
+    return value.toString();
   }
 
-  updateAccuracyStats(newAccuracy: number) {
-    const currentPlayer = this.gameState?.players.find(p => p.id === this.webSocketService.playerId);
-    if (currentPlayer) {
-      if (!currentPlayer.bestAccuracy || newAccuracy > currentPlayer.bestAccuracy) {
-        currentPlayer.bestAccuracy = newAccuracy;
-      }
-
-      if (!currentPlayer.guessHistory) {
-        currentPlayer.guessHistory = [];
-      }
-      currentPlayer.guessHistory.push(newAccuracy);
-      currentPlayer.averageAccuracy = currentPlayer.guessHistory.reduce((a, b) => a + b, 0) / currentPlayer.guessHistory.length;
-    }
+  startGame(): void {
+    this.webSocketService.startGame();
   }
 
-  skipTutorial(): void {
-    this.showTutorial = false;
-    if (this.isHost) {
-      this.startGame();
-    }
+  nextRound(): void {
+    this.webSocketService.nextRound();
+  }
+
+  startNewGame(): void {
+    this.webSocketService.startNewGame();
+  }
+
+  get isHost(): boolean {
+    return this.gameState?.players.some(
+      p => p.id === this.webSocketService.playerId && p.isHost
+    ) ?? false;
   }
 
   getSubmittedCount(): number {
@@ -1292,14 +1232,6 @@ export class GameBoardComponent implements OnInit, OnDestroy {
       .join('')
       .toUpperCase()
       .slice(0, 2);
-  }
-
-  getCurrentRound(): number {
-    return this.gameState?.currentRound || 1;
-  }
-
-  getTotalRounds(): number {
-    return 5; // Hardcoded to always be 5 rounds
   }
 
   formatValue(value: number): string {
@@ -1338,18 +1270,15 @@ export class GameBoardComponent implements OnInit, OnDestroy {
     );
 
     if (currentPlayer) {
-      const roundScore = this.getScoreForRound();
-      if (!currentPlayer.roundScores) {
-        currentPlayer.roundScores = [];
-      }
-      currentPlayer.roundScores.push(roundScore);
-      currentPlayer.score = currentPlayer.roundScores.reduce((a, b) => a + b, 0);
-
-      this.addDebugLog('Updated player scores', {
+      console.log('[FRONTEND_SCORE_UPDATE]', {
         playerId: currentPlayer.id,
-        roundScore,
+        playerName: currentPlayer.name,
         totalScore: currentPlayer.score,
-        roundScores: currentPlayer.roundScores
+        roundScores: currentPlayer.roundScores,
+        currentRound: this.gameState.currentRound,
+        question: this.gameState.currentQuestion,
+        roundResults: this.gameState.roundResults,
+        timestamp: new Date().toISOString()
       });
     }
   }
@@ -1373,5 +1302,64 @@ export class GameBoardComponent implements OnInit, OnDestroy {
     while (this.debugLogs.length > 20) {
       this.debugLogs.pop();
     }
+  }
+
+  skipTutorial(): void {
+    this.showTutorial = false;
+    if (this.isHost) {
+      this.startGame();
+    }
+  }
+
+  submitGuess(): void {
+    if (!this.canSubmitGuess) return;
+    
+    console.log('[FRONTEND_SUBMIT_GUESS]', {
+      value: this.sliderValue,
+      denormalizedValue: this.getDenormalizedValue(),
+      currentQuestion: this.gameState?.currentQuestion,
+      timestamp: new Date().toISOString()
+    });
+
+    this.onGaugeValueChange(this.sliderValue);
+  }
+
+  private normalizeValue(value: number): number {
+    if (!this.gameState?.currentQuestion) {
+      console.warn('GameBoard: No question available for normalization, returning 50');
+      return 50;
+    }
+    
+    const minValue = this.gameState.currentQuestion.minValue ?? 0;
+    const maxValue = this.gameState.currentQuestion.maxValue ?? 100;
+    const range = maxValue - minValue;
+    
+    // Convert actual value to percentage (0-100)
+    const percentage = ((value - minValue) / range) * 100;
+    console.log('GameBoard: Normalizing value', {
+      value,
+      minValue,
+      maxValue,
+      percentage
+    });
+    return percentage;
+  }
+
+  private getDenormalizedValue(): number {
+    if (!this.gameState?.currentQuestion) return 0;
+    
+    const minValue = this.gameState.currentQuestion.minValue || 0;
+    const maxValue = this.gameState.currentQuestion.maxValue || 100;
+    const range = maxValue - minValue;
+    
+    // Convert from percentage (0-100) back to actual value range
+    const denormalized = minValue + (this.sliderValue / 100) * range;
+    console.log('GameBoard: Denormalizing value', {
+      percentage: this.sliderValue,
+      minValue,
+      maxValue,
+      denormalized
+    });
+    return Math.round(Math.max(minValue, Math.min(maxValue, denormalized)));
   }
 } 
