@@ -5,7 +5,8 @@ import { GameState, Player } from '../models/game.model';
 import { environment } from '../../environments/environment';
 
 // Version info for debugging
-const BUILD_VERSION = '2024-03-03.1';
+const BUILD_VERSION = '2024-03-03.2';
+const BUILD_TIMESTAMP = new Date().toISOString();
 const PRODUCTION_URL = 'https://wavelength-game-backend.onrender.com';
 const WS_PRODUCTION_URL = 'wss://wavelength-game-backend.onrender.com';
 
@@ -71,9 +72,20 @@ export class WebSocketService {
   playerId: string | null = null;
 
   constructor() {
+    // Version check message
+    console.log(
+      '%c ⚡ WebSocket Service Version Check ⚡ ',
+      'background: #ff0000; color: white; font-size: 20px; font-weight: bold; padding: 10px;'
+    );
+    console.log(
+      '%c If you do not see this red message with version 2024-03-03.2, you are running an old version! Clear your cache! ',
+      'background: #ff0000; color: white; font-size: 16px; padding: 5px;'
+    );
+    
     // Detailed initialization logging
     console.log('%c WebSocket Service Initialization', 'background: #222; color: #bada55', {
       buildVersion: BUILD_VERSION,
+      buildTimestamp: BUILD_TIMESTAMP,
       environment: environment.production ? 'production' : 'development',
       serverUrl: this.SERVER_URL,
       wsUrl: this.WS_URL,
