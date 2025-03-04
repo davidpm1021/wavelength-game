@@ -1181,14 +1181,20 @@ export class GameBoardComponent implements OnInit, OnDestroy {
     
     // Convert percentage to actual value
     const actualValue = min + (value / 100) * (max - min);
-    const roundedValue = Math.round(Math.max(min, Math.min(max, actualValue)));
     
-    // Add appropriate units based on question type or text content
+    // For word count questions, don't round the value
     if (question.text.toLowerCase().includes('word count') || 
         question.text.toLowerCase().includes('words were') ||
         question.text.toLowerCase().includes('total words')) {
-      return `${roundedValue} words`;
-    } else if (question.text.toLowerCase().includes('activities')) {
+      const exactValue = Math.max(min, Math.min(max, actualValue));
+      return `${exactValue} words`;
+    }
+    
+    // For other questions, round as usual
+    const roundedValue = Math.round(Math.max(min, Math.min(max, actualValue)));
+    
+    // Add appropriate units based on question type or text content
+    if (question.text.toLowerCase().includes('activities')) {
       return `${roundedValue} activities`;
     } else if (question.text.toLowerCase().includes('percentage')) {
       return `${roundedValue}%`;
