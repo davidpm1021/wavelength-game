@@ -947,6 +947,61 @@ export class GameBoardComponent implements OnInit, OnDestroy {
         }
       }
 
+      // Handle round completion and score review
+      if (oldPhase !== state?.gamePhase && state?.gamePhase === GamePhase.SHOWING_RESULTS && this.haveAllPlayersSubmitted()) {
+        this.updatePlayerScores();
+        const currentRound = this.gameState?.currentRound || 0;
+        this.addDebugLog('Checking end game condition', {
+          currentRound,
+          isLastRound: currentRound >= 5,
+          isHost: this.isHost
+        });
+
+        if (currentRound >= 5) {
+          // Last round - longer review time
+          if (this.isHost) {
+            setTimeout(() => {
+              if (this.gameState?.gamePhase === GamePhase.SHOWING_RESULTS) {
+                this.addDebugLog('Host: Attempting to end game');
+                this.webSocketService.endGame();
+                
+                // Backup timeout in case server doesn't respond
+                setTimeout(() => {
+                  if (this.gameState?.gamePhase === GamePhase.SHOWING_RESULTS) {
+                    this.addDebugLog('Host: No server response, forcing game over state');
+                    this.gameState = {
+                      ...this.gameState,
+                      gamePhase: GamePhase.GAME_OVER
+                    };
+                  }
+                }, 3000);
+              }
+            }, 10000); // Increased from 5000 to 10000 ms
+          } else {
+            // Non-host players wait slightly longer than host
+            setTimeout(() => {
+              if (this.gameState?.gamePhase === GamePhase.SHOWING_RESULTS) {
+                this.addDebugLog('Non-host: Still in SHOWING_RESULTS after timeout, forcing game over state');
+                this.gameState = {
+                  ...this.gameState,
+                  gamePhase: GamePhase.GAME_OVER
+                };
+              }
+            }, 12000); // Increased from 6000 to 12000 ms
+          }
+        } else {
+          // Regular rounds - longer review time
+          if (this.isHost) {
+            setTimeout(() => {
+              if (this.gameState?.gamePhase === GamePhase.SHOWING_RESULTS) {
+                this.addDebugLog('Moving to next round');
+                this.webSocketService.nextRound();
+              }
+            }, 8000); // Increased from 5000 to 8000 ms
+          }
+        }
+      }
+
       // Show start prompt only for host in waiting state
       if (state?.gamePhase === GamePhase.WAITING_FOR_PLAYERS && 
           this.isHost && 
