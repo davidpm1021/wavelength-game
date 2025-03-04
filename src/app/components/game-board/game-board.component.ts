@@ -1124,36 +1124,24 @@ export class GameBoardComponent implements OnInit, OnDestroy {
 
   getTargetValue(): number {
     if (!this.gameState?.currentQuestion) return 0;
-    
-    const question = this.gameState.currentQuestion;
-    const correctPosition = question.correctPosition;
-    const min = question.minValue || 0;
-    const max = question.maxValue || 100;
-    
-    // Convert the correct position to a percentage
-    const percentage = ((correctPosition - min) / (max - min)) * 100;
-    
-    // Don't round for word count questions
-    if (question.text.toLowerCase().includes('word count') || 
-        question.text.toLowerCase().includes('words were') ||
-        question.text.toLowerCase().includes('total words')) {
-      return Math.max(0, Math.min(100, percentage));
-    }
-    
-    return Math.round(Math.max(0, Math.min(100, percentage)));
+    return this.gameState.currentQuestion.correctPosition;
   }
 
   getDisplayValue(): string {
-    const value = this.getDenormalizedValue();
-    const question = this.gameState?.currentQuestion;
+    const actualValue = this.convertToActualValue(this.sliderPosition);
+    return this.formatValue(actualValue);
+  }
+
+  formatValue(value: number): string {
+    if (!this.gameState?.currentQuestion) return value.toString();
     
-    if (!question) return value.toString();
+    const question = this.gameState.currentQuestion;
     
     // For word count questions, show exact value
     if (question.text.toLowerCase().includes('word count') || 
         question.text.toLowerCase().includes('words were') ||
         question.text.toLowerCase().includes('total words')) {
-      return `${value} words`;
+      return `${Math.floor(value)} words`;
     }
     
     // For other questions, round and add appropriate units
@@ -1192,37 +1180,6 @@ export class GameBoardComponent implements OnInit, OnDestroy {
       .join('')
       .toUpperCase()
       .slice(0, 2);
-  }
-
-  formatValue(value: number): string {
-    if (!this.gameState?.currentQuestion) return value.toString();
-    
-    const question = this.gameState.currentQuestion;
-    const min = question.minValue || 0;
-    const max = question.maxValue || 100;
-    
-    // Convert percentage to actual value
-    const actualValue = min + (value / 100) * (max - min);
-    
-    // For word count questions, don't round the value
-    if (question.text.toLowerCase().includes('word count') || 
-        question.text.toLowerCase().includes('words were') ||
-        question.text.toLowerCase().includes('total words')) {
-      const exactValue = Math.max(min, Math.min(max, actualValue));
-      return `${exactValue} words`;
-    }
-    
-    // For other questions, round as usual
-    const roundedValue = Math.round(Math.max(min, Math.min(max, actualValue)));
-    
-    // Add appropriate units based on question type or text content
-    if (question.text.toLowerCase().includes('activities')) {
-      return `${roundedValue} activities`;
-    } else if (question.text.toLowerCase().includes('percentage')) {
-      return `${roundedValue}%`;
-    }
-    
-    return roundedValue.toString();
   }
 
   haveAllPlayersSubmitted(): boolean {
@@ -1281,49 +1238,41 @@ export class GameBoardComponent implements OnInit, OnDestroy {
   submitGuess(): void {
     if (!this.canSubmitGuess || !this.gameState?.currentQuestion) return;
     
-    const question = this.gameState.currentQuestion;
-    const min = question.minValue || 0;
-    const max = question.maxValue || 100;
-    const range = max - min;
-    
-    // Convert slider value (0-100) to actual value in question's range
-    const actualValue = min + (this.sliderPosition / 100) * range;
+    // Convert slider position to actual value
+    const actualValue = this.convertToActualValue(this.sliderPosition);
     
     console.log('[FRONTEND_SUBMIT_GUESS]', {
       sliderPosition: this.sliderPosition,
       actualValue,
-      questionRange: { min, max },
-      currentQuestion: question,
+      question: this.gameState.currentQuestion,
       timestamp: new Date().toISOString()
     });
 
-    this.onGaugeValueChange(actualValue);
+    this.webSocketService.submitGuess(actualValue);
+    this.canSubmitGuess = false;
   }
 
-  private getDenormalizedValue(): number {
-    if (!this.gameState?.currentQuestion) return 0;
+  private convertToActualValue(percentage: number): number {
+    if (!this.gameState?.currentQuestion) return percentage;
     
     const question = this.gameState.currentQuestion;
     const min = question.minValue || 0;
     const max = question.maxValue || 100;
     const range = max - min;
     
-    // Convert from percentage (0-100) back to actual value range
-    const denormalized = min + (this.sliderPosition / 100) * range;
-    
-    // Don't round for word count questions
-    if (question.text.toLowerCase().includes('word count') || 
-        question.text.toLowerCase().includes('words were') ||
-        question.text.toLowerCase().includes('total words')) {
-      return Math.max(min, Math.min(max, denormalized));
-    }
-    
-    // Round for other questions
-    return Math.round(Math.max(min, Math.min(max, denormalized)));
+    // Convert percentage (0-100) to actual value
+    return min + (percentage / 100) * range;
   }
 
-  onSliderChange(value: string | number): void {
-    this.sliderPosition = typeof value === 'string' ? parseInt(value, 10) : value;
-    this.updatePlayerScores();
+  private convertToPercentage(actualValue: number): number {
+    if (!this.gameState?.currentQuestion) return actualValue;
+    
+    const question = this.gameState.currentQuestion;
+    const min = question.minValue || 0;
+    const max = question.maxValue || 100;
+    const range = max - min;
+    
+    // Convert actual value to percentage (0-100)
+    return ((actualValue - min) / range) * 100;
   }
 } 
