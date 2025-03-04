@@ -29,12 +29,18 @@
         </div>
 
         <div *ngIf="gameState.currentQuestion" class="game-content">
+            <div class="current-question">
+                <h3>{{ getCurrentQuestion() }}</h3>
+            </div>
+
             <app-gauge
                 [value]="sliderPosition"
+                [disabled]="!canSubmitGuess"
                 [leftLabel]="gameState.currentQuestion.leftConcept"
                 [rightLabel]="gameState.currentQuestion.rightConcept"
-                (valueChange)="onSliderChange($event)"
-            ></app-gauge>
+                [displayValue]="getDisplayValue()"
+                (valueChange)="onGaugeValueChange($event)">
+            </app-gauge>
 
             <div class="submit-container">
                 <button 
@@ -43,6 +49,15 @@
                 >
                     Submit Guess
                 </button>
+            </div>
+        </div>
+
+        <!-- Results Display -->
+        <div *ngIf="gameState.gamePhase === GamePhase.SHOWING_RESULTS" class="results-info">
+            <div class="value-comparison">
+                <div class="value-box">Your Guess: {{ getDisplayValue() }}</div>
+                <div class="value-arrow">→</div>
+                <div class="value-box">Target: {{ formatValue(getTargetValue()) }}</div>
             </div>
         </div>
     </div>

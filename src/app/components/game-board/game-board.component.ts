@@ -749,7 +749,7 @@ import { GaugeComponent } from '../gauge/gauge.component';
               
               <div class="score-breakdown">
                 <div class="value-comparison">
-                  <div class="value-box">Your Guess: {{ formatValue(sliderValue) }}</div>
+                  <div class="value-box">Your Guess: {{ formatValue(sliderPosition) }}</div>
                   <div class="value-arrow">→</div>
                   <div class="value-box">Target: {{ formatValue(getTargetValue()) }}</div>
                 </div>
@@ -805,7 +805,7 @@ import { GaugeComponent } from '../gauge/gauge.component';
           </div>
           
           <app-gauge
-            [value]="sliderValue"
+            [value]="sliderPosition"
             [disabled]="!canSubmitGuess"
             [leftLabel]="gameState?.currentQuestion?.leftConcept || ''"
             [rightLabel]="gameState?.currentQuestion?.rightConcept || ''"
@@ -893,7 +893,7 @@ export class GameBoardComponent implements OnInit, OnDestroy {
   private gameStateSubscription: Subscription;
   gameState: GameState | null = null;
   currentPlayer: Player | null = null;
-  sliderValue: number = 50;
+  sliderPosition: number = 50;
   currentQuestionId: string | null = null;
   canSubmitGuess: boolean = true;
   GamePhase = GamePhase;
@@ -938,11 +938,11 @@ export class GameBoardComponent implements OnInit, OnDestroy {
           this.addDebugLog('New question', {
             oldQuestionId,
             newQuestionId,
-            currentSliderValue: this.sliderValue
+            currentSliderPosition: this.sliderPosition
           });
           
           this.currentQuestionId = newQuestionId;
-          this.sliderValue = 50;
+          this.sliderPosition = 50;
           this.canSubmitGuess = true;
         }
       }
@@ -966,6 +966,7 @@ export class GameBoardComponent implements OnInit, OnDestroy {
 
   onGaugeValueChange(value: number): void {
     if (this.gameState?.gamePhase === GamePhase.ROUND_IN_PROGRESS && !this.currentPlayer?.hasSubmitted) {
+      this.sliderPosition = value;
       this.webSocketService.submitGuess(value);
       this.canSubmitGuess = false;
     }
@@ -1095,7 +1096,7 @@ export class GameBoardComponent implements OnInit, OnDestroy {
     const range = max - min;
     
     // Convert both values to the actual scale before calculating distance
-    const actualGuess = min + (this.sliderValue / 100) * range;
+    const actualGuess = min + (this.sliderPosition / 100) * range;
     const targetValue = currentQuestion.correctPosition;
     const distance = Math.abs(actualGuess - targetValue);
     return Math.round((distance / range) * 100);
@@ -1131,18 +1132,39 @@ export class GameBoardComponent implements OnInit, OnDestroy {
     
     // Convert the correct position to a percentage
     const percentage = ((correctPosition - min) / (max - min)) * 100;
-    console.log('GameBoard: Target value calculation', {
-      correctPosition,
-      min,
-      max,
-      percentage: Math.round(percentage)
-    });
+    
+    // Don't round for word count questions
+    if (question.text.toLowerCase().includes('word count') || 
+        question.text.toLowerCase().includes('words were') ||
+        question.text.toLowerCase().includes('total words')) {
+      return Math.max(0, Math.min(100, percentage));
+    }
+    
     return Math.round(Math.max(0, Math.min(100, percentage)));
   }
 
   getDisplayValue(): string {
-    const value = Math.round(this.getDenormalizedValue());
-    return value.toString();
+    const value = this.getDenormalizedValue();
+    const question = this.gameState?.currentQuestion;
+    
+    if (!question) return value.toString();
+    
+    // For word count questions, show exact value
+    if (question.text.toLowerCase().includes('word count') || 
+        question.text.toLowerCase().includes('words were') ||
+        question.text.toLowerCase().includes('total words')) {
+      return `${value} words`;
+    }
+    
+    // For other questions, round and add appropriate units
+    const roundedValue = Math.round(value);
+    if (question.text.toLowerCase().includes('activities')) {
+      return `${roundedValue} activities`;
+    } else if (question.text.toLowerCase().includes('percentage')) {
+      return `${roundedValue}%`;
+    }
+    
+    return roundedValue.toString();
   }
 
   startGame(): void {
@@ -1265,10 +1287,10 @@ export class GameBoardComponent implements OnInit, OnDestroy {
     const range = max - min;
     
     // Convert slider value (0-100) to actual value in question's range
-    const actualValue = min + (this.sliderValue / 100) * range;
+    const actualValue = min + (this.sliderPosition / 100) * range;
     
     console.log('[FRONTEND_SUBMIT_GUESS]', {
-      sliderValue: this.sliderValue,
+      sliderPosition: this.sliderPosition,
       actualValue,
       questionRange: { min, max },
       currentQuestion: question,
@@ -1287,18 +1309,21 @@ export class GameBoardComponent implements OnInit, OnDestroy {
     const range = max - min;
     
     // Convert from percentage (0-100) back to actual value range
-    const denormalized = min + (this.sliderValue / 100) * range;
-    console.log('GameBoard: Denormalizing value', {
-      sliderValue: this.sliderValue,
-      min,
-      max,
-      denormalized: Math.round(denormalized)
-    });
+    const denormalized = min + (this.sliderPosition / 100) * range;
+    
+    // Don't round for word count questions
+    if (question.text.toLowerCase().includes('word count') || 
+        question.text.toLowerCase().includes('words were') ||
+        question.text.toLowerCase().includes('total words')) {
+      return Math.max(min, Math.min(max, denormalized));
+    }
+    
+    // Round for other questions
     return Math.round(Math.max(min, Math.min(max, denormalized)));
   }
 
   onSliderChange(value: string | number): void {
-    this.sliderValue = typeof value === 'string' ? parseInt(value, 10) : value;
+    this.sliderPosition = typeof value === 'string' ? parseInt(value, 10) : value;
     this.updatePlayerScores();
   }
 } 
